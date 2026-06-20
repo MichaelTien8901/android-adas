@@ -67,10 +67,21 @@
 - [x] 8.5 Settings/about screen with persistent access to the safety disclaimer
 
 ## 9. Integration, benchmark & validation
-<!-- Requires the physical S22+ / S26 Ultra units + Qualcomm QNN SDK. -->
+<!-- 9.1/9.4 (latency, sustained-FPS deploy) need the Qualcomm QNN SDK + units.
+     9.2/9.3/9.6 can be done now on the ORT-CPU fallback path (no SDK). -->
+
+<!-- Validated on-device 2026-06-20 (Galaxy S22+ SM-S906W, ORT-CPU fallback path,
+     no QNN SDK): debug APK builds, installs, launches; first-run disclaimer +
+     runtime permissions; device ID correct (platform=taro soc=SM8450 htp=v69);
+     CameraX opens; both models load (detector -> CPU, lane -> CPU); classical-CV
+     lane fallback engages cleanly when the lane model is absent. Perception
+     *functions* (detections/warnings) not yet exercised — needs road imagery (9.6). -->
 
 - [ ] 9.1 End-to-end on S22+: measure glass-to-warning latency against the ≤~100 ms budget
 - [ ] 9.2 Validate each warning's activation/clear behavior against its spec scenarios (road or replayed footage)
 - [ ] 9.3 Validate degraded-mode behavior: GPS dropout (tunnel), thermal throttle, non-Snapdragon fallback
 - [ ] 9.4 Deploy & benchmark on S26 Ultra; make the deploy decision on post-throttle sustained FPS
 - [ ] 9.5 Resolve the YOLO11n AGPL-3.0 licensing decision (enterprise license vs detector swap) before distribution
+- [ ] 9.6 Add a debug replay source (bundled/pushed MP4 → Bitmap → PerceptionEngine, bypassing CameraX) behind a Settings toggle, so each warning's activation/clear can be validated deterministically without driving (the replayed-footage method for 9.2)
+- [ ] 9.7 Close the lane preprocessing gap: replicate UFLDv2's top-crop (crop_ratio) in `Preprocess` for the lane input so row-anchor alignment is correct (currently full-frame letterbox → approximate lanes)
+- [ ] 9.8 Move perception off CPU without the full context-binary build: swap to the QNN-enabled ORT AAR (`onnxruntime-android-qnn`) + bundle the QNN runtime libs to activate the ORT QNN-EP (HTP) path on Snapdragon (the shipped `onnxruntime-android` AAR is CPU-only, so even on the S22+ everything runs on CPU)
