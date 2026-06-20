@@ -56,7 +56,13 @@
 - [x] 7.2 LDW: departure detection, activation-speed gate + hysteresis, lane-availability gate, best-effort intent suppression (lane-departure-warning)
 - [x] 7.3 Headway: THW estimation, tailgating threshold with dwell + hysteresis, low-speed gating (headway-monitoring)
 - [x] 7.4 TSR: speed-limit recognition + persistence/expiry, over-speed warning with tolerance, best-effort stop/light cues (traffic-sign-recognition)
+      <!-- PARTIAL: over-speed logic (persistence/expiry/tolerance) is wired, and
+           stop-sign + traffic-light cues are validated on-device (S22+ replay,
+           ~0.85 conf). But speed-LIMIT recognition is NOT functional: YOLO11n
+           (COCO) has no speed-limit class, so SPEED_LIMIT_SIGN detections are
+           never produced and the over-speed warning can never fire. Needs 7.6. -->
 - [x] 7.5 Wire all four evaluators to the perception contract + speed-context; make each independently toggleable
+- [ ] 7.6 Implement speed-limit sign recognition (the missing input for 7.4 over-speed): add a GTSRB-style classifier on detected sign regions (research/02 Phase 2) that emits `SPEED_LIMIT_SIGN` detections carrying the recognized value in `Detection.attribute`; export/quantize it like the other models and wire it into the perception pipeline. Optionally add a light-state classifier for red/yellow/green
 
 ## 8. Driver HMI (driver-alert-hmi)
 
