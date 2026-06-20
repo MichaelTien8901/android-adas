@@ -128,11 +128,16 @@ def main() -> None:
     if args.fp32:
         fp32.replace(out)
     else:
-        # UFLDv2's FC head is ~96M params -> 385MB fp32, too large to mmap/heap on
-        # a phone. Dynamic INT8 (weight-only, no calibration) shrinks it ~4x and
-        # keeps the ORT fallback viable; the QNN path stays the production route.
+        # UFLDv2's FC head is ~85M of 96M params -> 385MB fp32, too large to
+        # mmap/heap on a phone. Dynamic INT8 (weight-only, no calibration) on the
+        # FC shrinks it ~4x. Quantize ONLY MatMul/Gemm, NOT Conv: Conv quantization
+        # emits ConvInteger, which the onnxruntime-android runtime cannot execute
+        # (ORT_NOT_IMPLEMENTED) -- it loads MatMulInteger fine. So the conv backbone
+        # stays fp32 and the model remains loadable on-device. QNN stays the
+        # production route for full-INT8.
         from onnxruntime.quantization import quantize_dynamic, QuantType
-        quantize_dynamic(str(fp32), str(out), weight_type=QuantType.QInt8)
+        quantize_dynamic(str(fp32), str(out), weight_type=QuantType.QInt8,
+                         op_types_to_quantize=["MatMul", "Gemm"])
         fp32.unlink()
 
     mb = out.stat().st_size / 1e6
