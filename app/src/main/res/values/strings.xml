@@ -34,6 +34,14 @@
     <string name="pref_headway">Tailgating / headway</string>
     <string name="pref_tsr">Traffic sign / over-speed</string>
 
+    <!-- Camera / calibration -->
+    <string name="settings_camera">Camera</string>
+    <string name="pref_calibrate">Calibrate horizon</string>
+    <string name="pref_calibrate_hint">Align the lane detector to your mount: drag the line to the skyline so the sky above it is ignored.</string>
+    <string name="calib_instructions">Mount the phone as you\'ll drive, then drag the amber line onto the horizon / skyline. The dimmed area above is ignored by lane detection.</string>
+    <string name="calib_save">Save horizon</string>
+    <string name="calib_saved">Horizon saved (%1$d%%)</string>
+
     <!-- Validation (debug) -->
     <string name="settings_validation">Validation (debug)</string>
     <string name="pref_replay">Replay test video</string>

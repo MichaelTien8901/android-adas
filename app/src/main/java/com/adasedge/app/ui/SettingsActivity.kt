@@ -1,5 +1,6 @@
 package com.adasedge.app.ui
 
+import android.content.Intent
 import android.os.Bundle
 import android.widget.CompoundButton
 import androidx.appcompat.app.AppCompatActivity
@@ -31,6 +32,9 @@ class SettingsActivity : AppCompatActivity() {
             headway.bind(prefs.headwayEnabled) { prefs.headwayEnabled = it }
             tsr.bind(prefs.tsrEnabled) { prefs.tsrEnabled = it }
             replay.bind(prefs.replayMode) { prefs.replayMode = it }
+            calibrateButton.setOnClickListener {
+                startActivity(Intent(this@SettingsActivity, CalibrationActivity::class.java))
+            }
         }
     }
 

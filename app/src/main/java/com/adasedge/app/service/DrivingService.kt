@@ -18,6 +18,7 @@ import androidx.lifecycle.LifecycleService
 import com.adasedge.app.R
 import com.adasedge.app.alert.AlertController
 import com.adasedge.app.camera.CameraController
+import com.adasedge.app.core.Calibration
 import com.adasedge.app.core.Prefs
 import com.adasedge.app.inference.FrameScheduler
 import com.adasedge.app.inference.ThermalGovernor
@@ -99,7 +100,7 @@ class DrivingService : LifecycleService() {
         if (started) return
         started = true
         perception = try {
-            PerceptionEngine(this)
+            PerceptionEngine(this, Calibration(horizonRatio = prefs.horizonRatio))
         } catch (t: Throwable) {
             Log.e(TAG, "perception init failed", t)
             _error.value = "Model assets missing — see tools/README. Showing camera only."

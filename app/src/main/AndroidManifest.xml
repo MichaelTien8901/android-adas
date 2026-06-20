@@ -46,6 +46,11 @@
             android:name=".ui.SettingsActivity"
             android:exported="false" />
 
+        <activity
+            android:name=".ui.CalibrationActivity"
+            android:exported="false"
+            android:screenOrientation="landscape" />
+
         <service
             android:name=".service.DrivingService"
             android:exported="false"

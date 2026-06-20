@@ -52,6 +52,12 @@ class Prefs(context: Context) {
         get() = sp.getInt(KEY_REPLAY_SPEED, 70)
         set(v) = sp.edit { putInt(KEY_REPLAY_SPEED, v) }
 
+    /** Calibrated horizon row (0..1) from the guided calibration; drives the lane
+        crop + distance geometry. Defaults to the rough built-in value. */
+    var horizonRatio: Float
+        get() = sp.getFloat(KEY_HORIZON, Calibration.DEFAULT.horizonRatio)
+        set(v) = sp.edit { putFloat(KEY_HORIZON, v.coerceIn(0.05f, 0.95f)) }
+
     companion object {
         private const val KEY_DISCLAIMER = "disclaimer_accepted"
         private const val KEY_AUDIBLE = "audible"
@@ -63,5 +69,6 @@ class Prefs(context: Context) {
         private const val KEY_TSR = "tsr"
         private const val KEY_REPLAY = "replay_mode"
         private const val KEY_REPLAY_SPEED = "replay_speed_kmh"
+        private const val KEY_HORIZON = "horizon_ratio"
     }
 }
