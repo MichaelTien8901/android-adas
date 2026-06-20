@@ -1,24 +1,41 @@
-# Native QNN bridge for the ADAS detector/lane runtime.
-# NOT wired into the Gradle build by default so the APK builds without the QNN
-# SDK. To enable: set QNN_SDK_ROOT and add to app/build.gradle.kts:
-#
-#   android { defaultConfig { externalNativeBuild { cmake { arguments += "-DQNN_SDK_ROOT=${'$'}{System.getenv("QNN_SDK_ROOT")}" } } }
-#             externalNativeBuild { cmake { path = file("src/main/cpp/CMakeLists.txt") } } }
-#
+# Native QNN bridge for the ADAS detector/lane runtime (libadas_qnn.so).
+# Builds adas_qnn.cpp + the vendored QNN SampleApp helpers against the QNN
+# headers. Wired into Gradle via externalNativeBuild; QNN_SDK_ROOT is passed
+# from build.gradle.kts. The vendored helpers under cpp/qnn/ are fetched from the
+# SDK by tools/vendor_qnn_sources.sh (git-ignored — Qualcomm-licensed).
 cmake_minimum_required(VERSION 3.22)
-project(adas_qnn)
+project(adas_qnn LANGUAGES CXX)
 
 if(NOT DEFINED QNN_SDK_ROOT)
   message(FATAL_ERROR "QNN_SDK_ROOT not set — point it at your Qualcomm QNN SDK")
 endif()
 
-add_library(adas_qnn SHARED adas_qnn.cpp)
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+
+set(QNN_DIR ${CMAKE_CURRENT_SOURCE_DIR}/qnn)
+
+# Vendored SampleApp helper sources (skip QnnSampleApp.cpp — we provide our own
+# controller; keep only the reusable utils + PAL/Log).
+file(GLOB QNN_HELPER_SRC
+  ${QNN_DIR}/Utils/*.cpp
+  ${QNN_DIR}/WrapperUtils/*.cpp
+  ${QNN_DIR}/Log/*.cpp
+  ${QNN_DIR}/PAL/src/common/*.cpp
+  ${QNN_DIR}/PAL/src/linux/*.cpp)
+
+add_library(adas_qnn SHARED adas_qnn.cpp ${QNN_HELPER_SRC})
 
 target_include_directories(adas_qnn PRIVATE
-  ${QNN_SDK_ROOT}/include/QNN
-  ${QNN_SDK_ROOT}/include)
+  ${QNN_DIR}
+  ${QNN_DIR}/Utils
+  ${QNN_DIR}/WrapperUtils
+  ${QNN_DIR}/Log
+  ${QNN_DIR}/PAL/include
+  ${QNN_SDK_ROOT}/include/QNN)
 
-# Link the QNN System lib for context-binary loading; libQnnHtp.so is dlopen'd
-# at runtime from jniLibs/arm64-v8a.
+target_compile_options(adas_qnn PRIVATE -fexceptions -frtti -Wno-unused-parameter)
+
 find_library(log-lib log)
-target_link_libraries(adas_qnn ${log-lib})
+# libQnnHtp.so / libQnnSystem.so are dlopen'd at runtime from jniLibs/arm64-v8a.
+target_link_libraries(adas_qnn ${log-lib} ${CMAKE_DL_LIBS})

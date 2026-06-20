@@ -56,3 +56,9 @@ Thumbs.db
 # Model weights (downloaded by export scripts; regenerable)
 *.pt
 *.pth
+
+# Qualcomm QNN SDK artifacts — vendored/copied from QNN_SDK_ROOT, not committed
+# (Qualcomm-licensed). Regenerate with tools/vendor_qnn_sources.sh.
+app/src/main/cpp/qnn/
+app/src/main/jniLibs/
+app/src/main/assets/models/dsp/

@@ -24,7 +24,7 @@ object QnnNative {
     }
 
     /** Load a pre-built HTP context binary. Returns a handle, or 0 on failure. */
-    external fun loadContext(contextBinaryPath: String, socId: Int, dspArch: String): Long
+    external fun loadContext(contextBinaryPath: String, nativeLibDir: String, socId: Int, dspArch: String): Long
 
     /** Run inference. [input] is row-major NCHW float. Returns flattened outputs. */
     external fun run(handle: Long, input: FloatArray): Array<FloatArray>

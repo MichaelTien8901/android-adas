@@ -6,6 +6,7 @@ import com.adasedge.app.inference.DeviceInfo
 import com.adasedge.app.inference.ModelRunner
 import com.adasedge.app.inference.TensorOut
 import com.adasedge.app.model.AccelPath
+import java.io.File
 
 /**
  * Primary path: runs a pre-built HTP context binary on the Hexagon NPU via the
@@ -38,7 +39,14 @@ class QnnModelRunner private constructor(
             val asset = "${modelBase}_$arch.bin"
             if (!AssetModels.exists(ctx, asset)) return null
             val path = AssetModels.materialize(ctx, asset)
-            val handle = QnnNative.loadContext(path, DeviceInfo.socId(), arch)
+            // The Hexagon skel ships as an asset (DSP arch, not arm64). Materialize
+            // it so ADSP_LIBRARY_PATH can point at a real dir; fall back to the
+            // native lib dir if absent.
+            val skel = "dsp/libQnnHtp${arch.uppercase()}Skel.so"
+            val skelDir = if (AssetModels.exists(ctx, skel))
+                File(AssetModels.materialize(ctx, skel)).parent ?: ctx.applicationInfo.nativeLibraryDir
+            else ctx.applicationInfo.nativeLibraryDir
+            val handle = QnnNative.loadContext(path, skelDir, DeviceInfo.socId(), arch)
             if (handle == 0L) return null
             return QnnModelRunner(handle)
         }

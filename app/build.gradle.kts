@@ -3,9 +3,15 @@ plugins {
     id("org.jetbrains.kotlin.android")
 }
 
+// Native QNN HTP bridge is built only when QNN_SDK_ROOT is set (and the vendored
+// sources exist); otherwise the APK builds without it and falls back to ORT/CPU.
+val qnnSdkRoot: String? = System.getenv("QNN_SDK_ROOT")
+val qnnBridgeEnabled = qnnSdkRoot != null && file("src/main/cpp/qnn/Utils/IOTensor.cpp").exists()
+
 android {
     namespace = "com.adasedge.app"
     compileSdk = 34
+    ndkVersion = "26.3.11579264"
 
     defaultConfig {
         applicationId = "com.adasedge.app"
@@ -19,6 +25,17 @@ android {
         ndk {
             // ADAS NPU pipeline targets arm64 only (Snapdragon Hexagon).
             abiFilters += "arm64-v8a"
+        }
+        if (qnnBridgeEnabled) {
+            externalNativeBuild {
+                cmake { arguments += listOf("-DQNN_SDK_ROOT=$qnnSdkRoot", "-DANDROID_STL=c++_shared") }
+            }
+        }
+    }
+
+    if (qnnBridgeEnabled) {
+        externalNativeBuild {
+            cmake { path = file("src/main/cpp/CMakeLists.txt"); version = "3.22.1" }
         }
     }
 

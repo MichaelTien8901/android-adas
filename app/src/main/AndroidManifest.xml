@@ -26,6 +26,10 @@
         android:theme="@style/Theme.AdasEdge"
         tools:targetApi="34">
 
+        <!-- cDSP RPC lib (public vendor library) — required by the QNN HTP stub to
+             reach the Hexagon NPU. Optional so the app still installs elsewhere. -->
+        <uses-native-library android:name="libcdsprpc.so" android:required="false" />
+
         <activity
             android:name=".ui.DisclaimerActivity"
             android:exported="true"
