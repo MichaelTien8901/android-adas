@@ -169,7 +169,7 @@ class DrivingService : LifecycleService() {
 
     /** Log warning transitions so replay validation is observable in logcat. */
     private fun logWarnings(warns: List<Warning>, r: PerceptionResult) {
-        val keys = warns.filter { it.level >= WarningLevel.ADVISORY }
+        val keys = warns.filter { it.level >= WarningLevel.INFO }
             .map { "${it.type}:${it.level}" }.toSet()
         if (keys != lastWarnKeys) {
             val added = keys - lastWarnKeys
