@@ -1,5 +1,6 @@
 package com.adasedge.app.perception
 
+import com.adasedge.app.core.Calibration
 import com.adasedge.app.core.Config
 import com.adasedge.app.inference.ModelRunner
 import com.adasedge.app.model.LaneGeometry
@@ -24,7 +25,12 @@ class LaneDetector(
     private val griding: Int = 100,
     private val minConfidence: Float = 0.35f,
     private val cropRatio: Float = Config.LANE_CROP_RATIO,
+    private val horizonRatio: Float = Calibration.DEFAULT.horizonRatio,
 ) {
+    // Top of the lane-input region in full-frame normalized-y (sky crop + UFLDv2's
+    // internal bottom-crop). Lane row-anchor y in [0,1] maps to [yTop, 1] of the frame.
+    private val yTop = horizonRatio + (1f - cropRatio) * (1f - horizonRatio)
+
     fun detect(input: FloatArray): LaneGeometry? {
         val outs = runner.run(input)
         // Expect a location tensor [.. numLanes*numRow*griding ..] and existence.
@@ -46,9 +52,8 @@ class LaneDetector(
                 val present = exist?.let { it.data[l * numRow + r] > 0.5f } ?: (bestVal > minConfidence)
                 if (!present || bestCol < 0) continue
                 val x = bestCol / (griding - 1f)
-                // Map the row-anchor y from lane-input space back to the full frame:
-                // the input is the bottom (cropRatio) fraction of the frame height.
-                val y = (1f - cropRatio) + (r / (numRow - 1f)) * cropRatio
+                // Map the row-anchor y from lane-input space back to the full frame.
+                val y = yTop + (r / (numRow - 1f)) * (1f - yTop)
                 pts += floatArrayOf(x, y)
                 totalConf += sigmoidish(bestVal); counted++
             }

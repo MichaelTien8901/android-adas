@@ -55,18 +55,26 @@ object Preprocess {
     }
 
     /**
-     * UFLDv2 lane preprocessing: stretch the frame to [dstW] x round([dstH]/[cropRatio])
-     * (no aspect preservation — the model is trained that way), then keep the bottom
-     * [dstH] rows (drops the sky). Returns an NCHW [0,1] RGB input. A lane point's
-     * normalized y in this input maps back to the full frame as
-     * `(1 - cropRatio) + y * cropRatio`; x maps directly (full-width stretch).
+     * UFLDv2 lane preprocessing. First drops everything above the horizon
+     * ([horizonRatio]..1 of the frame) — empirically the road should start near the
+     * top of the model input — then stretches that band to [dstW] x round([dstH]/
+     * [cropRatio]) (no aspect preservation — the model is trained that way) and keeps
+     * the bottom [dstH] rows. Returns an NCHW [0,1] RGB input. Lane-y is remapped to
+     * full-frame space in LaneDetector using the same [horizonRatio]/[cropRatio].
      */
-    fun toLaneInput(src: Bitmap, dstW: Int, dstH: Int, cropRatio: Float): FloatArray {
+    fun toLaneInput(src: Bitmap, dstW: Int, dstH: Int, horizonRatio: Float, cropRatio: Float): FloatArray {
         val fullH = Math.round(dstH / cropRatio)
         val cropTop = fullH - dstH
+        val srcTop = (src.height * horizonRatio).toInt().coerceIn(0, src.height - 2)
+        val srcBandH = src.height - srcTop
+        val sy = fullH.toFloat() / srcBandH
         val scaled = Bitmap.createBitmap(dstW, fullH, Bitmap.Config.ARGB_8888)
         val canvas = Canvas(scaled)
-        val m = Matrix().apply { setScale(dstW.toFloat() / src.width, fullH.toFloat() / src.height) }
+        // Map source rows [srcTop, srcH] -> dst rows [0, fullH] (sky dropped).
+        val m = Matrix().apply {
+            setScale(dstW.toFloat() / src.width, sy)
+            postTranslate(0f, -srcTop * sy)
+        }
         canvas.drawBitmap(src, m, Paint(Paint.FILTER_BITMAP_FLAG))
 
         val pixels = IntArray(dstW * dstH)

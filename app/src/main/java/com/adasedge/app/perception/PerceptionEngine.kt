@@ -32,7 +32,7 @@ class PerceptionEngine(
     private val laneRunner: ModelRunner? = runCatching {
         EngineFactory.create(context, "lane", 3, Config.LANE_INPUT_H, Config.LANE_INPUT_W)
     }.getOrNull()
-    private val laneDetector = laneRunner?.let { LaneDetector(it) }
+    private val laneDetector = laneRunner?.let { LaneDetector(it, horizonRatio = calib.horizonRatio) }
     private val classicalLanes = ClassicalLaneFallback()
 
     private val distance = DistanceEstimator(calib)
@@ -50,7 +50,7 @@ class PerceptionEngine(
             val detections = detector.detect(detPrepared, w, h)
 
             val lanes = laneDetector?.let { ld ->
-                ld.detect(Preprocess.toLaneInput(frame, Config.LANE_INPUT_W, Config.LANE_INPUT_H, Config.LANE_CROP_RATIO))
+                ld.detect(Preprocess.toLaneInput(frame, Config.LANE_INPUT_W, Config.LANE_INPUT_H, calib.horizonRatio, Config.LANE_CROP_RATIO))
             } ?: classicalLanes.detect(frame)
             lanesAvailableLastFrame = lanes != null
 
