@@ -1,0 +1,108 @@
+# ADAS Edge — Device Target Tiers
+
+Reference for the QNN object-detection pipeline. Covers the dev target (S22+) and
+the deployment candidates (S26 family). The pipeline is identical across all of
+them — only the **HTP architecture string**, **SoC platform id**, and **thermal
+envelope** change. Parameterize the QNN config on `TARGET_DEVICE`; everything else
+(YOLO11n → ONNX → QNN → INT8 → benchmark) stays the same.
+
+---
+
+## Target matrix
+
+| Device | Role | SoC | Hexagon HTP arch | `ro.board.platform` | RAM | Thermal envelope | Notes |
+|---|---|---|---|---|---|---|---|
+| **Galaxy S22+ (SM-S906W)** | Dev / PoC target (in hand) | Snapdragon 8 Gen 1 (SM8450) | **v69** | `taro` | 8 GB | Weakest — 8 Gen 1 throttles hard under sustained load; S22+ vapor chamber helps marginally | Confirmed Snapdragon (W suffix). Fine to develop & validate the whole loop. |
+| **Galaxy S26 Ultra** | Deployment (recommended) | Snapdragon 8 Elite Gen 5 (**global**, no split) | **v81** (Elite Gen 5) | `kaanapali`* | 12 GB (16 GB on 1 TB) | Best — largest Samsung vapor chamber to date, ~21% better heat dissipation vs S25 Ultra | Snapdragon everywhere → zero Exynos risk. Best sustained-clock headroom for real-time ADAS. |
+
+\* **Verify the platform id and HTP arch on-device** once ADB is up (see commands
+below). The Elite Gen 5 platform string and exact HTP arch version must be read
+from the actual unit and pinned into the QNN config — do not trust this table
+blind for the context-binary build. The S22+ values (`taro` / v69) are confirmed.
+
+---
+
+## Confirm device identity on-device (run once per unit)
+
+```bash
+# Chipset / platform — feeds the HTP arch decision
+adb shell getprop ro.board.platform      # S22+: taro ; S26: read & record
+adb shell getprop ro.hardware            # expect qcom on Snapdragon units
+adb shell getprop ro.soc.model           # e.g. SM8450 (S22+)
+
+# Sanity: Exynos units will show exynos / s5e here -> WRONG path, stop
+adb shell getprop ro.board.platform | grep -qi exynos && echo "EXYNOS - no QNN path"
+```
+
+If `ro.board.platform` returns an `exynos`/`s5e*` value, this device cannot use
+the QNN/Hexagon pipeline. Stop and either get a Snapdragon unit or switch to the
+LiteRT/NNAPI fallback track.
+
+---
+
+## QNN config parameterization
+
+Drive the per-device differences from a single switch so the repo builds for any
+target without code changes.
+
+```bash
+# qnn/target.env  — source this before convert/quantize
+case "${TARGET_DEVICE}" in
+  s22plus)   HTP_ARCH=v69 ; SOC_ID=43  ; PLATFORM=taro       ;;  # SM8450 (confirmed)
+  s26plus)   HTP_ARCH=v81 ; SOC_ID=TBD ; PLATFORM=TBD        ;;  # 8 Elite Gen 5 — verify on-device
+  s26ultra)  HTP_ARCH=v81 ; SOC_ID=TBD ; PLATFORM=TBD        ;;  # 8 Elite Gen 5 — verify on-device
+  *) echo "unknown TARGET_DEVICE: ${TARGET_DEVICE}" >&2 ; exit 1 ;;
+esac
+export HTP_ARCH SOC_ID PLATFORM
+```
+
+```bash
+# Used by qnn-context-binary-generator (htp_config.json template)
+{
+  "graphs": [{ "graph_names": ["yolo11n"] }],
+  "devices": [{
+    "soc_id":  ${SOC_ID},
+    "dsp_arch": "${HTP_ARCH}",
+    "pd_session": "unsigned"
+  }]
+}
+```
+
+- `SOC_ID` and the exact `dsp_arch` for the Elite Gen 5 parts are marked **TBD** on
+  purpose — read them from the actual S26 before the first context-binary build.
+  A wrong SoC id causes a silent CPU fallback or a refused build.
+- The **model build target stays `aarch64-android`** for every device — only the
+  HTP context binary is device-specific. So one ONNX export + one quantized graph
+  can be re-contexted per device without re-quantizing.
+
+---
+
+## Thermal test (run early on every device)
+
+The sustained-load test is the decisive benchmark — it's where the S22+ shows its
+ceiling and where the Ultra justifies itself.
+
+```bash
+# 10-minute sustained NPU loop; capture FPS + thermal/clock decay
+adb shell "cd /data/local/tmp && qnn-net-run \
+  --backend libQnnHtp.so --retrieve_context yolo11n_htp.bin \
+  --input_list input_list.txt --num_inferences 20000 \
+  --profiling_level detailed --output_dir out_sustained/"
+# then: parse_profile.py out_sustained/  -> p50/p99 latency + FPS-over-time curve
+```
+
+Record for each device: cold-start FPS, FPS after 10 min, and the throttle knee
+time. The deployment decision (S26+ vs Ultra) should be made on the **post-throttle
+sustained FPS**, not the cold peak.
+
+---
+
+## Summary
+
+- **Develop on the S22+ now** (v69 / taro, confirmed Snapdragon) — full pipeline,
+  no purchase needed to start.
+- **Deploy on an S26 Ultra** for best sustained thermals + guaranteed Snapdragon,
+  or **S26+** to save money with the same NPU.
+- **Verify the W-suffix Snapdragon model + read the on-device HTP arch / SoC id**
+  before pinning the S26 QNN config.
+- One ONNX + one quantized graph; only the HTP context binary is per-device.
