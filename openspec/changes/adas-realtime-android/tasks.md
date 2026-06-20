@@ -23,14 +23,20 @@
 - [x] 3.6 Add thermal-aware degradation (reduce resolution/cadence under throttle)
 
 ## 4. Model toolchain & quantization (realtime-inference)
-<!-- Scripts authored in tools/ ; execution requires the Qualcomm QNN SDK + the phones. -->
+<!-- 4.1 and the ONNX-export half of 4.6 need only Python/Ultralytics (done).
+     The QNN INT8 / context-binary / benchmark steps (4.2-4.5, 4.7) require the
+     Qualcomm QNN SDK + the phones. -->
 
-- [ ] 4.1 Export YOLO11n → ONNX with the chosen input resolution and COCO classes (script: tools/export_yolo11n.py)
+- [x] 4.1 Export YOLO11n → ONNX with the chosen input resolution and COCO classes (script: tools/export_yolo11n.py) — done via tools/fetch_detector.sh; detector.onnx (1x3x640x640 -> 1x84x8400, COCO), validated on S22+
 - [ ] 4.2 Build the QNN INT8 post-training quantization with representative road calibration data (script: tools/quantize_qnn.sh)
 - [ ] 4.3 Validate quantized detection accuracy vs FP baseline; enforce the accuracy gate (script: tools/validate_accuracy.py)
 - [ ] 4.4 Generate the S22+ (v69/taro) HTP context binary; benchmark with qnn-net-run (script: tools/gen_context_binary.sh)
 - [ ] 4.5 Read S26 Ultra soc_id/dsp_arch on-device and generate the v81 context binary (script: tools/gen_context_binary.sh)
 - [ ] 4.6 Export & INT8-quantize UFLDv2 lane model (CULane-validated) to a co-resident context binary (script: tools/export_ufldv2.py)
+      <!-- PARTIAL: tools/export_ufldv2.py exports + dynamic-INT8-quantizes UFLDv2 to
+           an ORT model (lane.onnx), validated on S22+. Remaining: it's TuSimple
+           (not CULane) weights, and a QNN HTP *context binary* (co-resident with the
+           detector) still needs the SDK. -->
 - [ ] 4.7 Run the 10-min sustained thermal loop with both models co-resident; record post-throttle FPS (script: tools/benchmark_sustained.sh)
 
 ## 5. Perception engine (adas-perception)
