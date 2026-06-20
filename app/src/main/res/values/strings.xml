@@ -1,0 +1,36 @@
+<resources>
+    <string name="app_name">ADAS Edge</string>
+
+    <string name="disclaimer_title">Driver-Assistance Aid — Read Before Use</string>
+    <string name="disclaimer_body">ADAS Edge is a driver-assistance aid, NOT a certified or autonomous driving system. It provides warnings only and never controls the vehicle.\n\nWarnings may be late, inaccurate, or absent — especially where GPS is weak (tunnels, garages, dense cities), in poor light or weather, or when the camera view is obstructed. Vehicle speed is estimated from GPS, which is coarser and slower than a real car\'s speedometer.\n\nYou remain fully responsible for safe driving at all times. Keep your eyes on the road. Do not rely on this app to avoid a collision. Mount the device so it never obstructs your view.</string>
+    <string name="disclaimer_accept">I understand and accept</string>
+    <string name="disclaimer_review">Safety disclaimer</string>
+
+    <string name="start_driving">Start driving mode</string>
+    <string name="stop_driving">Stop</string>
+    <string name="settings">Settings</string>
+
+    <string name="perm_rationale_camera">Camera access is required to see the road ahead.</string>
+    <string name="perm_rationale_location">Location is used to estimate vehicle speed (GPS).</string>
+    <string name="perm_open_settings">Open settings</string>
+
+    <string name="notif_channel_name">Driving session</string>
+    <string name="notif_title">ADAS Edge active</string>
+    <string name="notif_text">Monitoring the road ahead.</string>
+
+    <!-- Degraded-mode indicators -->
+    <string name="status_speed_lost">Speed signal lost</string>
+    <string name="status_speed_estimated">Speed estimated (no GPS)</string>
+    <string name="status_thermal">Reduced performance (thermal)</string>
+    <string name="status_fallback">Reduced performance (no NPU)</string>
+    <string name="status_lanes_unavailable">Lanes unavailable</string>
+
+    <!-- Settings -->
+    <string name="pref_audible">Audible alerts</string>
+    <string name="pref_haptic">Haptic alerts</string>
+    <string name="pref_hud">HUD mirror mode</string>
+    <string name="pref_fcw">Forward collision warning</string>
+    <string name="pref_ldw">Lane departure warning</string>
+    <string name="pref_headway">Tailgating / headway</string>
+    <string name="pref_tsr">Traffic sign / over-speed</string>
+</resources>

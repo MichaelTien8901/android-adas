@@ -52,3 +52,7 @@ captures/
 # OS files
 .DS_Store
 Thumbs.db
+
+# Model weights (downloaded by export scripts; regenerable)
+*.pt
+*.pth

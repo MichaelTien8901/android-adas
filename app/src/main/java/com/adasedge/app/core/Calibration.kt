@@ -1,0 +1,20 @@
+package com.adasedge.app.core
+
+/**
+ * Monocular camera calibration used by the geometry-based distance estimator
+ * (adas-perception: "Per-target distance and TTC estimation"). Defaults are
+ * rough phone-on-windshield values; a one-time guided calibration should refine
+ * [focalLengthPx], [mountHeightM], and [horizonRatio] (design Open Question).
+ */
+data class Calibration(
+    /** Effective focal length in pixels at the analysis resolution. */
+    val focalLengthPx: Float = 1000f,
+    /** Camera height above the road, meters. */
+    val mountHeightM: Float = 1.2f,
+    /** Normalized image row (0..1) of the horizon line. */
+    val horizonRatio: Float = 0.45f,
+    /** Assumed physical width of a typical car, meters (known-width method). */
+    val typicalVehicleWidthM: Float = 1.8f,
+) {
+    companion object { val DEFAULT = Calibration() }
+}
