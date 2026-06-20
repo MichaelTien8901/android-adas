@@ -32,11 +32,7 @@
 - [ ] 4.3 Validate quantized detection accuracy vs FP baseline; enforce the accuracy gate (script: tools/validate_accuracy.py)
 - [x] 4.4 Generate the S22+ (v69/taro) HTP context binary; benchmark with qnn-net-run (script: tools/gen_context_binary.sh) — detector_v69.bin (3.9M) generated and RUN on the S22+ Hexagon v69 NPU: ~8.6 ms/inference (accel compute ~6.0 ms, 4 HVX threads), output [1,84,8400] verified. Well above the 15-FPS floor.
 - [ ] 4.5 Read S26 Ultra soc_id/dsp_arch on-device and generate the v81 context binary (script: tools/gen_context_binary.sh)
-- [ ] 4.6 Export & INT8-quantize UFLDv2 lane model (CULane-validated) to a co-resident context binary (script: tools/export_ufldv2.py)
-      <!-- PARTIAL: tools/export_ufldv2.py exports + dynamic-INT8-quantizes UFLDv2 to
-           an ORT model (lane.onnx), validated on S22+. Remaining: it's TuSimple
-           (not CULane) weights, and a QNN HTP *context binary* (co-resident with the
-           detector) still needs the SDK. -->
+- [x] 4.6 Export & INT8-quantize UFLDv2 lane model to a co-resident context binary (script: tools/export_ufldv2.py) — fp32 UFLDv2 (TuSimple) -> qairt-converter -> INT8 (64 road frames, lane preprocessing) -> lane_v69.bin (61M, FC-heavy), RUN on S22+ Hexagon v69 NPU at ~11.5 ms; loc[1,4,56,100]+exist[1,4,56] verified. (Still TuSimple, not CULane.)
 - [ ] 4.7 Run the 10-min sustained thermal loop with both models co-resident; record post-throttle FPS (script: tools/benchmark_sustained.sh)
 
 ## 5. Perception engine (adas-perception)
