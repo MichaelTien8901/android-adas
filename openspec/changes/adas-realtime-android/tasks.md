@@ -28,9 +28,9 @@
      Qualcomm QNN SDK + the phones. -->
 
 - [x] 4.1 Export YOLO11n → ONNX with the chosen input resolution and COCO classes (script: tools/export_yolo11n.py) — done via tools/fetch_detector.sh; detector.onnx (1x3x640x640 -> 1x84x8400, COCO), validated on S22+
-- [ ] 4.2 Build the QNN INT8 post-training quantization with representative road calibration data (script: tools/quantize_qnn.sh)
+- [x] 4.2 Build the QNN INT8 post-training quantization with representative road calibration data (script: tools/quantize_qnn.sh) — done with QAIRT 2.26.2 (qairt-converter -> qairt-quantizer) in an ubuntu:22.04/py3.10 container; 64 real road frames as calibration; detector.dlc (11M) -> detector_quant.dlc (2.9M INT8)
 - [ ] 4.3 Validate quantized detection accuracy vs FP baseline; enforce the accuracy gate (script: tools/validate_accuracy.py)
-- [ ] 4.4 Generate the S22+ (v69/taro) HTP context binary; benchmark with qnn-net-run (script: tools/gen_context_binary.sh)
+- [x] 4.4 Generate the S22+ (v69/taro) HTP context binary; benchmark with qnn-net-run (script: tools/gen_context_binary.sh) — detector_v69.bin (3.9M) generated and RUN on the S22+ Hexagon v69 NPU: ~8.6 ms/inference (accel compute ~6.0 ms, 4 HVX threads), output [1,84,8400] verified. Well above the 15-FPS floor.
 - [ ] 4.5 Read S26 Ultra soc_id/dsp_arch on-device and generate the v81 context binary (script: tools/gen_context_binary.sh)
 - [ ] 4.6 Export & INT8-quantize UFLDv2 lane model (CULane-validated) to a co-resident context binary (script: tools/export_ufldv2.py)
       <!-- PARTIAL: tools/export_ufldv2.py exports + dynamic-INT8-quantizes UFLDv2 to
