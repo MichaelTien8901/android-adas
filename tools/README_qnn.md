@@ -7,10 +7,41 @@ and falls back); to get the NPU path you must build the models and the native
 bridge against the Qualcomm AI Engine Direct (QNN) SDK.
 
 ## 0. Prerequisites
-- Qualcomm AI Engine Direct (QNN) SDK → set `QNN_SDK_ROOT`.
+- Qualcomm AI Engine Direct (QNN) SDK → set `QNN_SDK_ROOT` (see §0a).
 - `pip install ultralytics onnx onnxsim`
 - A connected S22+ / S26 unit over `adb`.
 - Calibration frames (representative road imagery) for INT8 quantization.
+
+## 0a. Getting the QNN SDK
+The SDK is now the **Qualcomm AI Runtime (QAIRT) SDK** (current name for / superset
+of the AI Engine Direct "QNN" SDK; bundles `qnn-net-run`, `qnn-context-binary-
+generator`, the converters, and the HTP backend libs). It is a **free community
+download** but gated behind a Qualcomm account + license acceptance.
+
+1. Create a free **Qualcomm ID** and sign in / accept the license at
+   https://www.qualcomm.com/developer/software/qualcomm-ai-engine-direct-sdk
+2. Download via the **Qualcomm Software Center** (recommended) or **Qualcomm
+   Package Manager (QPM3)** — see
+   https://docs.qualcomm.com/bundle/publicresource/topics/80-70015-15B/qnn-download.html
+   QPM CLI flow:
+   ```bash
+   qpm-cli --login <qualcomm-id>
+   qpm-cli --license-activate qualcomm_ai_engine_direct
+   qpm-cli --extract <installer>.qik
+   ```
+3. Installs to `/opt/qcom/aistack/qairt/<version>/`. Set the environment:
+   ```bash
+   source /opt/qcom/aistack/qairt/<version>/bin/envsetup.sh   # sets QNN_SDK_ROOT + PATH
+   # or: export QNN_SDK_ROOT=/opt/qcom/aistack/qairt/<version>
+   ```
+
+**Host requirement:** the SDK targets **Ubuntu 22.04 (x86-64)**; it is picky about
+glibc/clang/python. Use a 22.04 VM/container if your host differs.
+
+Alternatives: [quic/ai-engine-direct-helper](https://github.com/quic/ai-engine-direct-helper)
+(open-source helper with clearer examples), and **Qualcomm AI Hub** (cloud service
+that can compile/profile on real Snapdragon devices and hand back a prebuilt
+context binary — skips the local toolchain).
 
 ## 1. Confirm device identity (run once per unit)
 ```bash
