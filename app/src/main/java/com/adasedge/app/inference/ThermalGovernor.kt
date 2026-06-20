@@ -18,13 +18,20 @@ class ThermalGovernor(context: Context) {
 
     enum class Tier { FULL, REDUCED, MINIMAL }
 
+    /** Either cause is active — drives cadence reduction. */
     @Volatile var throttled: Boolean = false
         private set
+    /** Real OS thermal throttle (THERMAL_STATUS_SEVERE+). */
+    @Volatile var thermalSevere: Boolean = false
+        private set
+    /** Processing is below the sustained-FPS floor (not necessarily thermal). */
+    @Volatile var starved: Boolean = false
+        private set
 
-    /** Returns the current processing tier and updates [throttled]. */
+    /** Returns the current processing tier and updates the state flags. */
     fun tier(measuredFps: Float): Tier {
-        val thermalSevere = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) severeThermal() else false
-        val starved = measuredFps in 0.001f..Config.MIN_SUSTAINED_FPS
+        thermalSevere = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) severeThermal() else false
+        starved = measuredFps in 0.001f..Config.MIN_SUSTAINED_FPS
         throttled = thermalSevere || starved
         return when {
             thermalSevere && measuredFps < Config.MIN_SUSTAINED_FPS * 0.7f -> Tier.MINIMAL

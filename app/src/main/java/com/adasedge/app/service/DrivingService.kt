@@ -133,7 +133,8 @@ class DrivingService : LifecycleService() {
             _warnings.value = warns
             _status.value = RuntimeStatus(
                 accelPath = engine.accelPath,
-                thermalThrottled = governor.throttled,
+                thermalThrottled = governor.thermalSevere,
+                lowFps = governor.starved,
                 fps = scheduler.fps,
                 lanesAvailable = engine.lanesAvailableLastFrame,
                 speedValidity = spd.validity,

@@ -178,7 +178,8 @@ class OverlayView @JvmOverloads constructor(
                 SpeedValidity.DEAD_RECKONED -> add("SPEED EST" to AMBER)
                 else -> {}
             }
-            if (status.thermalThrottled) add("THERMAL" to AMBER)
+            if (status.thermalThrottled) add("THERMAL" to RED)
+            if (status.lowFps && !status.thermalThrottled) add("SLOW" to AMBER)
             if (status.reducedPerformance && !status.thermalThrottled) add("NO NPU" to AMBER)
             if (!status.lanesAvailable) add("NO LANES" to AMBER)
             add("${status.fps.toInt()} FPS" to GREEN)

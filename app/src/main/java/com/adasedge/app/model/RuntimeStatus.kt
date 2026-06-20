@@ -10,8 +10,10 @@ enum class AccelPath { QNN_HTP, ORT_QNN, LITERT_GPU, CPU }
  */
 data class RuntimeStatus(
     val accelPath: AccelPath = AccelPath.CPU,
-    /** True once a thermal throttle has forced a resolution/cadence reduction. */
+    /** Real OS thermal throttle (THERMAL_STATUS_SEVERE+) — distinct from low FPS. */
     val thermalThrottled: Boolean = false,
+    /** Below the sustained-FPS floor (slow pipeline, not necessarily heat). */
+    val lowFps: Boolean = false,
     val fps: Float = 0f,
     val lanesAvailable: Boolean = false,
     val speedValidity: SpeedValidity = SpeedValidity.INVALID,
