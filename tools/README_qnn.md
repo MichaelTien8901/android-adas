@@ -14,34 +14,42 @@ bridge against the Qualcomm AI Engine Direct (QNN) SDK.
 
 ## 0a. Getting the QNN SDK
 The SDK is now the **Qualcomm AI Runtime (QAIRT) SDK** (current name for / superset
-of the AI Engine Direct "QNN" SDK; bundles `qnn-net-run`, `qnn-context-binary-
-generator`, the converters, and the HTP backend libs). It is a **free community
-download** but gated behind a Qualcomm account + license acceptance.
+of the AI Engine Direct "QNN" SDK; bundles the host converters/quantizer,
+`qnn-net-run`, `qnn-context-binary-generator`, and the HTP backend libs). It is a
+**free community download** gated behind a Qualcomm account + license acceptance.
 
-1. Create a free **Qualcomm ID** and sign in / accept the license at
+**Use the ZIP from the Software Center — you do NOT need QPM3 / `qpm-cli` / the
+`.qik`.** The `.qik` is a proprietary container that only `qpm-cli` can open; the
+plain ZIP avoids that entirely.
+
+1. Create a free **Qualcomm ID**, sign in, and accept the license at
    https://www.qualcomm.com/developer/software/qualcomm-ai-engine-direct-sdk
-2. Download via the **Qualcomm Software Center** (recommended) or **Qualcomm
-   Package Manager (QPM3)** — see
-   https://docs.qualcomm.com/bundle/publicresource/topics/80-70015-15B/qnn-download.html
-   QPM CLI flow:
+2. Open the **Qualcomm Software Center**, pick a QAIRT/QNN version, and download the
+   **`.zip`** (e.g. `v2.26.2.240911.zip`). (The `.qik` + QPM3 route is the legacy
+   alternative and needs `qpm-cli`; skip it.)
+3. Unzip — it expands to `qairt/<version>/` — and move it somewhere stable:
    ```bash
-   qpm-cli --login <qualcomm-id>
-   qpm-cli --license-activate qualcomm_ai_engine_direct
-   qpm-cli --extract <installer>.qik
+   unzip v2.26.2.240911.zip -d ~/        # -> ~/qairt/<version>/
+   export QNN_SDK_ROOT=~/qairt/2.26.2.240911
+   source "$QNN_SDK_ROOT/bin/envsetup.sh"     # sets PATH + QNN libs
    ```
-3. Installs to `/opt/qcom/aistack/qairt/<version>/`. Set the environment:
+4. Verify (host tools + the S22+ V69 HTP libs are present):
    ```bash
-   source /opt/qcom/aistack/qairt/<version>/bin/envsetup.sh   # sets QNN_SDK_ROOT + PATH
-   # or: export QNN_SDK_ROOT=/opt/qcom/aistack/qairt/<version>
+   ls "$QNN_SDK_ROOT/bin/x86_64-linux-clang/qairt-converter"      # host converter
+   ls "$QNN_SDK_ROOT/lib/aarch64-android/libQnnHtpV69Stub.so"     # S22+ stub
+   ls "$QNN_SDK_ROOT/lib/hexagon-v69/libQnnHtpV69Skel.so"         # S22+ skel
    ```
 
-**Host requirement:** the SDK targets **Ubuntu 22.04 (x86-64)**; it is picky about
-glibc/clang/python. Use a 22.04 VM/container if your host differs.
+**Host requirement:** the SDK targets **Ubuntu 22.04 / Python 3.10 (x86-64)**. The
+device-side binaries + HTP libs run anywhere, but the **host Python converters**
+(`qairt-converter` / `qnn-onnx-converter`) may reject newer Pythons. On Ubuntu
+24.04 / Python 3.12, run the conversion steps in a `python3.10` venv or a
+`ubuntu:22.04` container; the `.so` / context-binary outputs are identical.
 
 Alternatives: [quic/ai-engine-direct-helper](https://github.com/quic/ai-engine-direct-helper)
 (open-source helper with clearer examples), and **Qualcomm AI Hub** (cloud service
-that can compile/profile on real Snapdragon devices and hand back a prebuilt
-context binary — skips the local toolchain).
+that compiles/profiles on real Snapdragon devices and returns a prebuilt context
+binary — skips the local toolchain).
 
 ## 1. Confirm device identity (run once per unit)
 ```bash
