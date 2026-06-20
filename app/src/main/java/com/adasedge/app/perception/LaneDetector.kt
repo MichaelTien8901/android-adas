@@ -1,5 +1,6 @@
 package com.adasedge.app.perception
 
+import com.adasedge.app.core.Config
 import com.adasedge.app.inference.ModelRunner
 import com.adasedge.app.model.LaneGeometry
 import kotlin.math.abs
@@ -22,9 +23,10 @@ class LaneDetector(
     private val numRow: Int = 56,
     private val griding: Int = 100,
     private val minConfidence: Float = 0.35f,
+    private val cropRatio: Float = Config.LANE_CROP_RATIO,
 ) {
-    fun detect(prepared: Preprocess.Prepared): LaneGeometry? {
-        val outs = runner.run(prepared.input)
+    fun detect(input: FloatArray): LaneGeometry? {
+        val outs = runner.run(input)
         // Expect a location tensor [.. numLanes*numRow*griding ..] and existence.
         val loc = outs.firstOrNull { it.data.size >= numLanes * numRow * griding } ?: return null
         val exist = outs.firstOrNull { it !== loc && it.data.size >= numLanes * numRow }
@@ -44,7 +46,9 @@ class LaneDetector(
                 val present = exist?.let { it.data[l * numRow + r] > 0.5f } ?: (bestVal > minConfidence)
                 if (!present || bestCol < 0) continue
                 val x = bestCol / (griding - 1f)
-                val y = r / (numRow - 1f)
+                // Map the row-anchor y from lane-input space back to the full frame:
+                // the input is the bottom (cropRatio) fraction of the frame height.
+                val y = (1f - cropRatio) + (r / (numRow - 1f)) * cropRatio
                 pts += floatArrayOf(x, y)
                 totalConf += sigmoidish(bestVal); counted++
             }

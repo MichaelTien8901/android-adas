@@ -11,6 +11,9 @@ object Config {
     const val MODEL_INPUT_SIZE = 640          // YOLO11n square input
     const val LANE_INPUT_W = 800              // UFLDv2 input
     const val LANE_INPUT_H = 320
+    /** UFLDv2 crop ratio: resize to W x (H/ratio) then keep the bottom H rows
+        (drops sky), matching the model's training preprocessing. */
+    const val LANE_CROP_RATIO = 0.8f
     const val DETECTION_CONF_THRESHOLD = 0.35f
     const val NMS_IOU_THRESHOLD = 0.45f
     const val MIN_SUSTAINED_FPS = 15f

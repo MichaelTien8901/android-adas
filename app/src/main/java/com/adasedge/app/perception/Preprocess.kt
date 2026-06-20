@@ -53,4 +53,34 @@ object Preprocess {
         }
         return Prepared(out, Letterbox(scale, padX, padY, dstW, dstH))
     }
+
+    /**
+     * UFLDv2 lane preprocessing: stretch the frame to [dstW] x round([dstH]/[cropRatio])
+     * (no aspect preservation — the model is trained that way), then keep the bottom
+     * [dstH] rows (drops the sky). Returns an NCHW [0,1] RGB input. A lane point's
+     * normalized y in this input maps back to the full frame as
+     * `(1 - cropRatio) + y * cropRatio`; x maps directly (full-width stretch).
+     */
+    fun toLaneInput(src: Bitmap, dstW: Int, dstH: Int, cropRatio: Float): FloatArray {
+        val fullH = Math.round(dstH / cropRatio)
+        val cropTop = fullH - dstH
+        val scaled = Bitmap.createBitmap(dstW, fullH, Bitmap.Config.ARGB_8888)
+        val canvas = Canvas(scaled)
+        val m = Matrix().apply { setScale(dstW.toFloat() / src.width, fullH.toFloat() / src.height) }
+        canvas.drawBitmap(src, m, Paint(Paint.FILTER_BITMAP_FLAG))
+
+        val pixels = IntArray(dstW * dstH)
+        scaled.getPixels(pixels, 0, dstW, 0, cropTop, dstW, dstH)   // bottom dstH rows
+        scaled.recycle()
+
+        val plane = dstW * dstH
+        val out = FloatArray(3 * plane)
+        for (i in 0 until plane) {
+            val p = pixels[i]
+            out[i] = ((p shr 16) and 0xFF) / 255f
+            out[plane + i] = ((p shr 8) and 0xFF) / 255f
+            out[2 * plane + i] = (p and 0xFF) / 255f
+        }
+        return out
+    }
 }

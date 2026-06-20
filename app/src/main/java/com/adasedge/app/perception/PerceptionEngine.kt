@@ -50,8 +50,7 @@ class PerceptionEngine(
             val detections = detector.detect(detPrepared, w, h)
 
             val lanes = laneDetector?.let { ld ->
-                val lanePrepared = Preprocess.toNchw(frame, Config.LANE_INPUT_W, Config.LANE_INPUT_H)
-                ld.detect(lanePrepared)
+                ld.detect(Preprocess.toLaneInput(frame, Config.LANE_INPUT_W, Config.LANE_INPUT_H, Config.LANE_CROP_RATIO))
             } ?: classicalLanes.detect(frame)
             lanesAvailableLastFrame = lanes != null
 

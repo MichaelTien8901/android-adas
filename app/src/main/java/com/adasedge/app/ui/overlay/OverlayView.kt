@@ -14,6 +14,7 @@ import com.adasedge.app.model.RuntimeStatus
 import com.adasedge.app.model.SpeedValidity
 import com.adasedge.app.model.Warning
 import com.adasedge.app.model.WarningLevel
+import com.adasedge.app.model.WarningType
 
 /**
  * Transparent realtime overlay (driver-alert-hmi). Two render modes:
@@ -132,7 +133,31 @@ class OverlayView @JvmOverloads constructor(
         canvas.drawRect(0f, 0f, width.toFloat(), h, bannerPaint)
         drawAlertTriangle(canvas, 38f, h / 2f, 22f, if (imminent) Color.WHITE else Color.BLACK)
         bannerText.color = if (imminent) Color.WHITE else Color.BLACK
-        canvas.drawText(top.message.ifEmpty { top.type.name.replace('_', ' ') }, 72f, h / 2f + 18f, bannerText)
+        canvas.drawText(bannerLabel(top), 72f, h / 2f + 18f, bannerText)
+    }
+
+    /**
+     * Banner text with LIVE distance/time pulled from the current frame's lead
+     * (not the warning's message — Warning.equals ignores message, so the warning
+     * StateFlow conflates message-only updates and the value would otherwise freeze).
+     */
+    private fun bannerLabel(top: Warning): String {
+        val lead = result?.lead
+        fun dist() = lead?.let { "%.0f m".format(it.distanceMeters) } ?: "-- m"
+        return when (top.type) {
+            WarningType.FORWARD_COLLISION -> {
+                val ttc = lead?.ttcSeconds
+                val ttcStr = if (ttc != null && ttc.isFinite()) "%.1f s".format(ttc) else "-- s"
+                "COLLISION   $ttcStr   ${dist()}"
+            }
+            WarningType.HEADWAY -> {
+                val mps = status.speedKmh / 3.6f
+                val thw = if (lead != null && mps > 0.5f) lead.distanceMeters / mps else null
+                val thwStr = if (thw != null && thw.isFinite()) "%.1f s".format(thw) else "-- s"
+                "TOO CLOSE   $thwStr   ${dist()}"
+            }
+            else -> top.message.ifEmpty { top.type.name.replace('_', ' ') }
+        }
     }
 
     private fun drawAlertTriangle(canvas: Canvas, cx: Float, cy: Float, r: Float, color: Int) {
