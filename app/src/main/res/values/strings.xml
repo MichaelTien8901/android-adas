@@ -33,4 +33,9 @@
     <string name="pref_ldw">Lane departure warning</string>
     <string name="pref_headway">Tailgating / headway</string>
     <string name="pref_tsr">Traffic sign / over-speed</string>
+
+    <!-- Validation (debug) -->
+    <string name="settings_validation">Validation (debug)</string>
+    <string name="pref_replay">Replay test video</string>
+    <string name="pref_replay_hint">Feeds a clip instead of the live camera, with a constant synthetic speed, so warnings can be validated without driving.\n\nPush a clip:\nadb push road.mp4 /sdcard/Android/data/com.adasedge.app/files/replay.mp4\n\nThen enable this and start driving mode.</string>
 </resources>

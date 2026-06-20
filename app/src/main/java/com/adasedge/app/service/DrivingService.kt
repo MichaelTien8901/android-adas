@@ -23,8 +23,12 @@ import com.adasedge.app.inference.FrameScheduler
 import com.adasedge.app.inference.ThermalGovernor
 import com.adasedge.app.model.PerceptionResult
 import com.adasedge.app.model.RuntimeStatus
+import com.adasedge.app.model.SpeedSample
+import com.adasedge.app.model.SpeedValidity
 import com.adasedge.app.model.Warning
+import com.adasedge.app.model.WarningLevel
 import com.adasedge.app.perception.PerceptionEngine
+import com.adasedge.app.replay.ReplaySource
 import com.adasedge.app.speed.SpeedContext
 import com.adasedge.app.warnings.WarningManager
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -43,6 +47,7 @@ class DrivingService : LifecycleService() {
 
     private lateinit var prefs: Prefs
     private val camera by lazy { CameraController(this) }
+    private val replay by lazy { ReplaySource(this) }
     private val scheduler = FrameScheduler()
     private lateinit var governor: ThermalGovernor
     private lateinit var speed: SpeedContext
@@ -52,6 +57,12 @@ class DrivingService : LifecycleService() {
 
     private val frameCounter = AtomicLong(0)
     private var started = false
+    private var replayActive = false
+    private var lastWarnKeys = emptySet<String>()
+
+    /** Replay-mode only: the decoded frame, for the overlay backdrop (null = live camera). */
+    private val _replayFrame = MutableStateFlow<Bitmap?>(null)
+    val replayFrame: StateFlow<Bitmap?> = _replayFrame.asStateFlow()
 
     private val _perception = MutableStateFlow<PerceptionResult?>(null)
     val perceptionState: StateFlow<PerceptionResult?> = _perception.asStateFlow()
@@ -94,6 +105,13 @@ class DrivingService : LifecycleService() {
             _error.value = "Model assets missing — see tools/README. Showing camera only."
             null
         }
+        // Validation path (task 9.6): replay a clip instead of the live camera.
+        if (prefs.replayMode && replay.available()) {
+            replayActive = true
+            Log.i(TAG, "REPLAY MODE: ${replay.file().name} @ ${prefs.replaySpeedKmh} km/h (synthetic speed)")
+            replay.start(sink = { bmp, ts -> onFrame(bmp, ts) })
+            return
+        }
         speed.start()
         camera.start(this, surfaceProvider, Size(1280, 720)) { bmp, ts -> onFrame(bmp, ts) }
     }
@@ -105,8 +123,10 @@ class DrivingService : LifecycleService() {
         if (!scheduler.tryBegin()) { bitmap.recycle(); return }
         try {
             val result = engine.process(bitmap, tsNanos)
-            val spd = speed.tick()
+            if (replayActive) publishReplayFrame(bitmap)
+            val spd = if (replayActive) syntheticSpeed() else speed.tick()
             val warns = warnings.evaluate(result, spd)
+            if (replayActive) logWarnings(warns, result)
             alert.update(warns)
             _perception.value = result
             _warnings.value = warns
@@ -126,8 +146,44 @@ class DrivingService : LifecycleService() {
         }
     }
 
+    /** Constant VALID speed during replay so speed-gated warnings can fire. */
+    private fun syntheticSpeed(): SpeedSample =
+        SpeedSample(
+            metersPerSecond = prefs.replaySpeedKmh / 3.6f,
+            validity = SpeedValidity.VALID,
+            accuracyMps = 0.5f,
+            stale = false,
+            timestampNanos = System.nanoTime(),
+        )
+
+    /** Hand a downscaled copy of the replay frame to the overlay backdrop. */
+    private fun publishReplayFrame(src: Bitmap) {
+        val maxW = 640
+        val scale = if (src.width > maxW) maxW.toFloat() / src.width else 1f
+        val w = (src.width * scale).toInt().coerceAtLeast(1)
+        val h = (src.height * scale).toInt().coerceAtLeast(1)
+        var copy = try { Bitmap.createScaledBitmap(src, w, h, true) } catch (t: Throwable) { return }
+        if (copy === src) copy = src.copy(Bitmap.Config.ARGB_8888, false) // never hand over the soon-recycled src
+        _replayFrame.value = copy   // ownership passes to the overlay (recycles its previous)
+    }
+
+    /** Log warning transitions so replay validation is observable in logcat. */
+    private fun logWarnings(warns: List<Warning>, r: PerceptionResult) {
+        val keys = warns.filter { it.level >= WarningLevel.ADVISORY }
+            .map { "${it.type}:${it.level}" }.toSet()
+        if (keys != lastWarnKeys) {
+            val added = keys - lastWarnKeys
+            if (added.isNotEmpty()) {
+                val lead = r.lead?.let { " lead=%.0fm ttc=%.1fs".format(it.distanceMeters, it.ttcSeconds) } ?: ""
+                Log.i(TAG, "WARN ${added.joinToString()}$lead dets=${r.detections.size} lanes=${r.lanes != null}")
+            }
+            lastWarnKeys = keys
+        }
+    }
+
     override fun onDestroy() {
-        camera.stop(); speed.stop(); alert.release(); perception?.close()
+        replay.stop(); camera.stop(); speed.stop(); alert.release(); perception?.close()
+        _replayFrame.value = null
         super.onDestroy()
     }
 

@@ -1,6 +1,7 @@
 package com.adasedge.app.ui.overlay
 
 import android.content.Context
+import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Paint
@@ -31,6 +32,10 @@ class OverlayView @JvmOverloads constructor(
     @Volatile private var status: RuntimeStatus = RuntimeStatus()
     @Volatile var hudMirror: Boolean = false
 
+    /** Replay-validation backdrop (null in live-camera mode). */
+    private var backdrop: Bitmap? = null
+    private val backdropDst = RectF()
+
     private val boxPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.STROKE; strokeWidth = 5f }
     private val labelBg = Paint(Paint.ANTI_ALIAS_FLAG)
     private val labelText = Paint(Paint.ANTI_ALIAS_FLAG).apply {
@@ -58,8 +63,24 @@ class OverlayView @JvmOverloads constructor(
         postInvalidateOnAnimation()
     }
 
+    /**
+     * Replay validation only: set the decoded frame drawn behind the overlay.
+     * Called on the main thread (serialized with [onDraw]), so recycling the
+     * previous frame here is safe. Pass null to clear.
+     */
+    fun submitBackground(frame: Bitmap?) {
+        val old = backdrop
+        backdrop = frame
+        if (old != null && old !== frame && !old.isRecycled) old.recycle()
+        postInvalidateOnAnimation()
+    }
+
     override fun onDraw(canvas: Canvas) {
         super.onDraw(canvas)
+        backdrop?.takeIf { !it.isRecycled }?.let {
+            backdropDst.set(0f, 0f, width.toFloat(), height.toFloat())
+            canvas.drawBitmap(it, null, backdropDst, null)
+        }
         if (hudMirror) drawHud(canvas) else drawDetailed(canvas)
     }
 

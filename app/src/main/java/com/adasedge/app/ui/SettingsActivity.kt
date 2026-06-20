@@ -30,6 +30,7 @@ class SettingsActivity : AppCompatActivity() {
             ldw.bind(prefs.ldwEnabled) { prefs.ldwEnabled = it }
             headway.bind(prefs.headwayEnabled) { prefs.headwayEnabled = it }
             tsr.bind(prefs.tsrEnabled) { prefs.tsrEnabled = it }
+            replay.bind(prefs.replayMode) { prefs.replayMode = it }
         }
     }
 

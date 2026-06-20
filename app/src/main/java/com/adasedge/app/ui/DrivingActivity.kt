@@ -75,6 +75,9 @@ class DrivingActivity : AppCompatActivity() {
                 launch {
                     svc.error.collect { msg -> if (msg != null) Toast.makeText(this@DrivingActivity, msg, Toast.LENGTH_LONG).show() }
                 }
+                launch {
+                    svc.replayFrame.collect { binding.overlay.submitBackground(it) }
+                }
             }
         }
     }

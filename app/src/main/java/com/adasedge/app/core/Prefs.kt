@@ -42,6 +42,16 @@ class Prefs(context: Context) {
         get() = sp.getBoolean(KEY_TSR, true)
         set(v) = sp.edit { putBoolean(KEY_TSR, v) }
 
+    /** Debug: feed a replay clip instead of the live camera (validation, task 9.6). */
+    var replayMode: Boolean
+        get() = sp.getBoolean(KEY_REPLAY, false)
+        set(v) = sp.edit { putBoolean(KEY_REPLAY, v) }
+
+    /** Synthetic ego speed injected during replay (above all warning speed gates). */
+    var replaySpeedKmh: Int
+        get() = sp.getInt(KEY_REPLAY_SPEED, 70)
+        set(v) = sp.edit { putInt(KEY_REPLAY_SPEED, v) }
+
     companion object {
         private const val KEY_DISCLAIMER = "disclaimer_accepted"
         private const val KEY_AUDIBLE = "audible"
@@ -51,5 +61,7 @@ class Prefs(context: Context) {
         private const val KEY_LDW = "ldw"
         private const val KEY_HEADWAY = "headway"
         private const val KEY_TSR = "tsr"
+        private const val KEY_REPLAY = "replay_mode"
+        private const val KEY_REPLAY_SPEED = "replay_speed_kmh"
     }
 }
