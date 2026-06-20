@@ -123,10 +123,15 @@ class DrivingService : LifecycleService() {
         if (frameCounter.incrementAndGet() % governor.frameStride(tier) != 0L) { bitmap.recycle(); return }
         if (!scheduler.tryBegin()) { bitmap.recycle(); return }
         try {
+            val computeStart = System.nanoTime()
             val result = engine.process(bitmap, tsNanos)
             if (replayActive) publishReplayFrame(bitmap)
             val spd = if (replayActive) syntheticSpeed() else speed.tick()
             val warns = warnings.evaluate(result, spd)
+            // Latency budget (task 9.1): perception + warning compute per frame.
+            val computeMs = (System.nanoTime() - computeStart) / 1_000_000.0
+            if (frameCounter.get() % 30L == 0L)
+                Log.i(TAG, "latency: perception+warn ${"%.1f".format(computeMs)} ms (path=${engine.accelPath}, ${scheduler.fps.toInt()} fps)")
             if (replayActive) logWarnings(warns, result)
             alert.update(warns)
             _perception.value = result

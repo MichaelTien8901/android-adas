@@ -35,7 +35,10 @@ class AlertController(context: Context, private val prefs: Prefs) {
         if (top <= WarningLevel.INFO) { lastLevel = top; return }
 
         val now = System.currentTimeMillis()
-        val cooldown = if (top == WarningLevel.IMMINENT) 700L else 1800L
+        // Beep promptly on entry/escalation; while SUSTAINED, re-beep slowly for an
+        // advisory (tailgating can persist for minutes — avoid nagging) but stay
+        // urgent for an imminent collision.
+        val cooldown = if (top == WarningLevel.IMMINENT) 700L else 6000L
         val escalated = top.ordinal > lastLevel.ordinal
         if (!escalated && now - lastFireMs < cooldown) return
         lastFireMs = now
