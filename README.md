@@ -87,7 +87,16 @@ sustained-FPS deploy benchmark require the Qualcomm QNN SDK and the physical
 phones — see the remaining unchecked items in
 `openspec/changes/adas-realtime-android/tasks.md` (group 9) and `tools/README_qnn.md`.
 
-## Licensing note
-Ultralytics YOLO11n is **AGPL-3.0** — resolve before distribution (design D9 /
-task 9.5): obtain an Ultralytics Enterprise license or swap to an Apache/BSD
-detector retrained on BDD100K.
+## License & attribution
+This project is licensed under **AGPL-3.0** — see [`LICENSE`](LICENSE). It uses
+Ultralytics YOLO11 (AGPL-3.0), so the project as a whole is AGPL-3.0 to stay
+compatible. Third-party components, their licenses, and the relicensing path are
+listed in [`NOTICE`](NOTICE).
+
+Model weights and the Qualcomm QNN SDK are **not** bundled — they're fetched or
+provided at build time (`tools/`), each under its own license.
+
+**Before distribution** (design D9 / task 9.5): resolve the YOLO11n AGPL-3.0
+obligation — obtain an Ultralytics Enterprise license, or swap to a permissive
+detector (NanoDet/MobileNet-SSD) retrained on BDD100K, after which the project
+could be relicensed permissively.

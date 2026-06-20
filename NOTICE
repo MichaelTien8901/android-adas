@@ -1,0 +1,43 @@
+ADAS Edge — realtime Android driver-assistance
+Copyright (C) 2026 ADAS Edge contributors
+
+This program is free software: you can redistribute it and/or modify it under
+the terms of the GNU Affero General Public License version 3, as published by
+the Free Software Foundation. See the LICENSE file for the full text.
+
+WHY AGPL-3.0
+------------
+This project's perception path uses Ultralytics YOLO11, which is licensed
+AGPL-3.0. To stay compatible, the project as a whole is distributed under
+AGPL-3.0. To relicense permissively, replace the AGPL component (see "Detector"
+below) or obtain an Ultralytics Enterprise license (tracked as task 9.5).
+
+NOT a certified or autonomous driving system — warnings only; never controls the
+vehicle. See the in-app safety disclaimer.
+
+THIRD-PARTY COMPONENTS
+----------------------
+Model weights and SDKs are NOT included in this repository; they are fetched or
+provided at build time (see tools/ and tools/README_qnn.md). Each carries its own
+license — verify before distribution.
+
+Detector — Ultralytics YOLO11 (yolo11n)
+  AGPL-3.0 (or Ultralytics Enterprise). https://github.com/ultralytics/ultralytics
+  Drives the project's overall AGPL-3.0 licensing. Permissive alternatives to
+  evaluate: NanoDet (Apache-2.0), MobileNet-SSD.
+
+Lane model — Ultra-Fast-Lane-Detection-v2 (UFLDv2)
+  https://github.com/cfzd/Ultra-Fast-Lane-Detection-v2 (see upstream license).
+
+Runtimes / libraries (fetched via Gradle/Maven):
+  ONNX Runtime (Microsoft) .................... MIT
+  TensorFlow Lite / LiteRT (Google) ........... Apache-2.0
+  OpenCV ...................................... Apache-2.0
+  AndroidX, CameraX, Material Components ...... Apache-2.0
+  Google Play services (location) ............. Android SDK License
+  Qualcomm AI Engine Direct (QNN) SDK ......... Proprietary (Qualcomm); user-
+                                                provided, not redistributed here.
+
+Datasets referenced for training/validation (NOT used at runtime, NOT included):
+  TuSimple, CULane, BDD100K, KITTI — each under its own (often research-only)
+  terms; check before any commercial training run.
