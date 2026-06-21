@@ -43,6 +43,11 @@
 - [x] 5.4 Implement monocular distance (pinhole + ground-plane / known-width) with camera intrinsics
 - [x] 5.5 Implement TTC from lead-vehicle bbox-scale change with Kalman/temporal filtering
 - [x] 5.6 Define and publish the timestamped per-frame perception contract (detections + lanes + distance/TTC)
+- [ ] 5.8 Improve dashed-lane fitting robustness (research/06): layer in a
+      confidence-weighted + RANSAC/IRLS quadratic fit, then a Kalman track on the
+      curve coefficients `[a,b,c]`, and lane-width/parallel coupling so the solid
+      boundary anchors the noisy dashed one. Options + sources in
+      `research/06-lane-fitting-dashed-lanes.md`.
 - [x] 5.7 Lateral center calibration: a camera mounted off-centre / angled makes the straight-ahead point sit away from image x=0.5, biasing lane-departure judgement. Add a calibratable `centerRatio` (Calibration + Prefs, default 0.5) — a third draggable VERTICAL line in the guided calibration — and use it as the ego reference in `LaneDepartureWarning` (replace the hardcoded `ego = 0.5f`) and in the lead-vehicle in-path band (`PerceptionEngine.selectLead` 0.30–0.70).
 
 ## 6. Speed-context service (speed-context)
