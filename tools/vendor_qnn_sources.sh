@@ -42,5 +42,22 @@ cp "$QNN_SDK_ROOT/lib/hexagon-v69/unsigned/libQnnHtpV69Skel.so" "$ROOT/app/src/m
 cp "$QNN_SDK_ROOT/lib/hexagon-v81/unsigned/libQnnHtpV81Skel.so" "$ROOT/app/src/main/assets/models/dsp/" 2>/dev/null || \
   echo "   (skip v81 skel — needs QAIRT >= 2.47)"
 
-echo ">> Done. Place detector_v69.bin / lane_v69.bin in app/src/main/assets/models/,"
+echo ">> 16 KB-aligned libc++_shared.so (overrides OpenCV's 4 KB one for Android 15+/16"
+echo "   16 KB-page devices like the S26). Pulled from an NDK r27+ sysroot."
+NDK_SEARCH="${ANDROID_NDK_ROOT:-} ${ANDROID_HOME:-$HOME/Android/Sdk}/ndk ${ANDROID_SDK_ROOT:-}/ndk"
+LIBCPP=""
+for base in $NDK_SEARCH; do
+  for f in $(find "$base" -path "*aarch64-linux-android/libc++_shared.so" 2>/dev/null); do
+    if readelf -lW "$f" 2>/dev/null | awk '/LOAD/{exit ($NF=="0x4000")?0:1}'; then LIBCPP="$f"; break 2; fi
+  done
+done
+if [ -n "$LIBCPP" ]; then
+  cp "$LIBCPP" "$ROOT/app/src/main/jniLibs/arm64-v8a/libc++_shared.so"
+  echo "   copied $LIBCPP"
+else
+  echo "   WARNING: no 16 KB libc++_shared.so found — install NDK r27+ and copy its"
+  echo "   .../sysroot/usr/lib/aarch64-linux-android/libc++_shared.so into jniLibs."
+fi
+
+echo ">> Done. Place the *.bin context binaries in app/src/main/assets/models/,"
 echo "   then build with QNN_SDK_ROOT set to compile libadas_qnn.so."

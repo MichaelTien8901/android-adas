@@ -28,7 +28,9 @@ android {
         }
         if (qnnBridgeEnabled) {
             externalNativeBuild {
-                cmake { arguments += listOf("-DQNN_SDK_ROOT=$qnnSdkRoot", "-DANDROID_STL=c++_shared") }
+                // c++_static: statically link libc++ into libadas_qnn.so so no
+                // (4 KB-aligned, NDK 26) libc++_shared.so is packaged.
+                cmake { arguments += listOf("-DQNN_SDK_ROOT=$qnnSdkRoot", "-DANDROID_STL=c++_static") }
             }
         }
     }
@@ -68,6 +70,14 @@ android {
     androidResources {
         noCompress += listOf("onnx", "bin", "tflite", "dlc")
     }
+
+    packaging {
+        jniLibs {
+            // Prefer our 16 KB-aligned libc++_shared.so (jniLibs) over OpenCV's
+            // 4 KB one, for Android 15+/16 16 KB-page devices (S26).
+            pickFirsts += "**/libc++_shared.so"
+        }
+    }
 }
 
 dependencies {
@@ -79,8 +89,8 @@ dependencies {
     implementation("androidx.lifecycle:lifecycle-service:2.8.4")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.1")
 
-    // CameraX
-    val camerax = "1.3.4"
+    // CameraX (1.4.x ships 16 KB-aligned native libs for Android 15+/16 devices)
+    val camerax = "1.4.2"
     implementation("androidx.camera:camera-core:$camerax")
     implementation("androidx.camera:camera-camera2:$camerax")
     implementation("androidx.camera:camera-lifecycle:$camerax")
@@ -90,13 +100,14 @@ dependencies {
     implementation("com.google.android.gms:play-services-location:21.3.0")
 
     // OpenCV (classical-CV lane fallback + image ops). Published to Maven Central.
-    implementation("org.opencv:opencv:4.10.0")
+    implementation("org.opencv:opencv:4.11.0")
 
     // Inference fallbacks. Primary QNN path is loaded via JNI against the
     // Qualcomm AI Engine Direct .so libraries shipped in jniLibs (see tools/README).
-    implementation("com.microsoft.onnxruntime:onnxruntime-android:1.18.0")
-    implementation("org.tensorflow:tensorflow-lite:2.16.1")
-    implementation("org.tensorflow:tensorflow-lite-gpu:2.16.1")
+    // 16 KB-aligned versions for Android 15+/16 (S26 / 8 Elite Gen 5).
+    implementation("com.microsoft.onnxruntime:onnxruntime-android:1.22.0")
+    implementation("org.tensorflow:tensorflow-lite:2.17.0")
+    implementation("org.tensorflow:tensorflow-lite-gpu:2.17.0")
 
     testImplementation("junit:junit:4.13.2")
     testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.8.1")
