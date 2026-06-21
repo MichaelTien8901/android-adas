@@ -11,7 +11,7 @@
 - [x] 2.1 Wire CameraX preview + `ImageAnalysis` with `STRATEGY_KEEP_ONLY_LATEST`
 - [x] 2.2 Configure capture resolution/FPS as tunable params against the latency budget
 - [x] 2.3 Convert YUV_420_888 frames to the model input format with low-latency reuse
-- [ ] 2.4 Verify backpressure: under load only the latest frame is processed, others dropped (needs on-device run)
+- [x] 2.4 Verify backpressure: under load only the latest frame is processed, others dropped — VALIDATED on the S26. CameraX `STRATEGY_KEEP_ONLY_LATEST` + a synchronous analyzer (`proxy.close()` after `onFrame`) means CameraX delivers only the latest frame and drops stale ones upstream; the `FrameScheduler` in-flight guard is a secondary safety. Live run: sensor ~30 fps but pipeline processes ~7-10 fps (so ~2/3 dropped by keep-latest) with steady FPS and bounded latency — no queue buildup. Added a `dropped` counter to the latency log (`dropped=0` confirms the guard never backs up; the drops happen in CameraX, by design).
 
 ## 3. Device identification & QNN runtime (realtime-inference)
 

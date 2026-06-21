@@ -1,6 +1,7 @@
 package com.adasedge.app.inference
 
 import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicLong
 
 /**
  * Realtime frame gate (realtime-inference: "Realtime frame scheduling"). The
@@ -10,13 +11,25 @@ import java.util.concurrent.atomic.AtomicBoolean
  */
 class FrameScheduler {
     private val inFlight = AtomicBoolean(false)
+    private val droppedFrames = AtomicLong(0)
 
     @Volatile private var lastEndNanos = 0L
     @Volatile private var emaFps = 0f
     private val alpha = 0.2f
 
-    /** @return true if this frame may be processed; false if one is already in flight. */
-    fun tryBegin(): Boolean = inFlight.compareAndSet(false, true)
+    /**
+     * @return true if this frame may be processed; false if one is already in
+     * flight (caller must drop the frame). A false result tallies a drop so the
+     * keep-latest backpressure is observable (task 2.4).
+     */
+    fun tryBegin(): Boolean {
+        val acquired = inFlight.compareAndSet(false, true)
+        if (!acquired) droppedFrames.incrementAndGet()
+        return acquired
+    }
+
+    /** Cumulative frames dropped by the in-flight guard since start. */
+    val dropped: Long get() = droppedFrames.get()
 
     /** Call when a processed frame finishes; updates the rolling FPS. */
     fun end() {

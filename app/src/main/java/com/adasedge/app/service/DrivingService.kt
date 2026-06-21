@@ -135,7 +135,7 @@ class DrivingService : LifecycleService() {
             // Latency budget (task 9.1): perception + warning compute per frame.
             val computeMs = (System.nanoTime() - computeStart) / 1_000_000.0
             if (frameCounter.get() % 30L == 0L)
-                Log.i(TAG, "latency: perception+warn ${"%.1f".format(computeMs)} ms (path=${engine.accelPath}, ${scheduler.fps.toInt()} fps)")
+                Log.i(TAG, "latency: perception+warn ${"%.1f".format(computeMs)} ms (path=${engine.accelPath}, ${scheduler.fps.toInt()} fps, dropped=${scheduler.dropped})")
             if (replayActive) logWarnings(warns, result)
             alert.update(warns)
             _perception.value = result
