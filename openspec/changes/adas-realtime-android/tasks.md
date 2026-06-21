@@ -43,6 +43,7 @@
 - [x] 5.4 Implement monocular distance (pinhole + ground-plane / known-width) with camera intrinsics
 - [x] 5.5 Implement TTC from lead-vehicle bbox-scale change with Kalman/temporal filtering
 - [x] 5.6 Define and publish the timestamped per-frame perception contract (detections + lanes + distance/TTC)
+- [ ] 5.7 Lateral center calibration: a camera mounted off-centre / angled makes the straight-ahead point sit away from image x=0.5, biasing lane-departure judgement. Add a calibratable `centerRatio` (Calibration + Prefs, default 0.5) — a third draggable VERTICAL line in the guided calibration — and use it as the ego reference in `LaneDepartureWarning` (replace the hardcoded `ego = 0.5f`) and in the lead-vehicle in-path band (`PerceptionEngine.selectLead` 0.30–0.70).
 
 ## 6. Speed-context service (speed-context)
 
@@ -74,6 +75,7 @@
 - [x] 8.3 GLSurfaceView HUD mirror mode (simplified high-contrast layout)
 - [x] 8.4 Degraded-mode indicators: speed lost/dead-reckoned, thermal throttle, fallback path, lanes unavailable
 - [x] 8.5 Settings/about screen with persistent access to the safety disclaimer
+- [ ] 8.6 Draw the **drivable area** (a.k.a. free space / ego-lane corridor): fill the region between the left and right ego-lane boundaries (`LaneGeometry.left`/`right`) as a translucent polygon in `OverlayView`, tinted by state (e.g. green normal, amber on lane-departure). Requires both boundaries present; degrade gracefully to lines-only when one is missing.
 
 ## 9. Integration, benchmark & validation
 <!-- 9.1/9.4 (latency, sustained-FPS deploy) need the Qualcomm QNN SDK + units.
