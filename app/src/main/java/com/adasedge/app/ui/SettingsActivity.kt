@@ -26,6 +26,7 @@ class SettingsActivity : AppCompatActivity() {
         with(binding) {
             audible.bind(prefs.audibleAlerts) { prefs.audibleAlerts = it }
             haptic.bind(prefs.hapticAlerts) { prefs.hapticAlerts = it }
+            voice.bind(prefs.voiceAlerts) { prefs.voiceAlerts = it }
             hud.bind(prefs.hudMirror) { prefs.hudMirror = it }
             fcw.bind(prefs.fcwEnabled) { prefs.fcwEnabled = it }
             ldw.bind(prefs.ldwEnabled) { prefs.ldwEnabled = it }

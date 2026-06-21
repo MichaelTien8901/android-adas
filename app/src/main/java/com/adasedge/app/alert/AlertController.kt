@@ -1,21 +1,26 @@
 package com.adasedge.app.alert
 
 import android.content.Context
+import android.media.AudioAttributes
 import android.media.AudioManager
-import android.media.ToneGenerator
 import android.os.Build
+import android.media.ToneGenerator
 import android.os.VibrationEffect
 import android.os.Vibrator
 import android.os.VibratorManager
+import android.speech.tts.TextToSpeech
 import com.adasedge.app.core.Prefs
+import com.adasedge.app.model.Side
 import com.adasedge.app.model.Warning
 import com.adasedge.app.model.WarningLevel
+import com.adasedge.app.model.WarningType
+import java.util.Locale
 
 /**
  * Multi-modal alerts (driver-alert-hmi: "Multi-modal warning alerts"). Plays an
- * urgency-scaled audible tone and haptic cue for the highest-urgency active
- * warning, honoring the user's mute settings, and rate-limits so a sustained
- * warning does not buzz every frame.
+ * urgency-scaled audible tone, haptic cue, and optional spoken (text-to-speech)
+ * warning for the highest-urgency active warning, honoring the user's mute
+ * settings, and rate-limits so a sustained warning does not buzz every frame.
  */
 class AlertController(context: Context, private val prefs: Prefs) {
 
@@ -26,12 +31,41 @@ class AlertController(context: Context, private val prefs: Prefs) {
         @Suppress("DEPRECATION") context.getSystemService(Context.VIBRATOR_SERVICE) as Vibrator
     }
 
+    // Text-to-speech: init is async, so guard speech until onInit reports success.
+    @Volatile private var ttsReady = false
+    private val tts: TextToSpeech = TextToSpeech(context.applicationContext, ::onTtsInit)
+
+    private fun onTtsInit(status: Int) {
+        if (status != TextToSpeech.SUCCESS) return
+        val locale = Locale.getDefault().takeIf { tts.isLanguageAvailable(it) >= TextToSpeech.LANG_AVAILABLE } ?: Locale.US
+        tts.language = locale
+        // Navigation-guidance usage: spoken warnings duck music/maps and play OVER
+        // them, rather than being treated as mutable background media (which Samsung's
+        // audio-hardening can silence). Same rationale as turn-by-turn nav prompts.
+        tts.setAudioAttributes(
+            AudioAttributes.Builder()
+                .setUsage(AudioAttributes.USAGE_ASSISTANCE_NAVIGATION_GUIDANCE)
+                .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
+                .build()
+        )
+        ttsReady = true
+    }
+
     private var lastLevel = WarningLevel.NONE
     private var lastFireMs = 0L
 
     /** Drive cues from the current frame's warnings. */
     fun update(warnings: List<Warning>) {
-        val top = warnings.maxByOrNull { it.level.ordinal }?.level ?: WarningLevel.NONE
+        // Speed-limit announcement: speak each newly-detected limit ("Speed limit 50")
+        // independent of the urgency gate below — it's INFO-level and must not beep.
+        // TrafficSignWarning emits this exactly once per new value, so just speak it.
+        if (prefs.voiceAlerts && ttsReady) {
+            warnings.firstOrNull { it.type == WarningType.SPEED_LIMIT }
+                ?.let { tts.speak(it.message, TextToSpeech.QUEUE_ADD, null, "adas-limit") }
+        }
+
+        val topWarning = warnings.maxByOrNull { it.level.ordinal }
+        val top = topWarning?.level ?: WarningLevel.NONE
         if (top <= WarningLevel.INFO) { lastLevel = top; return }
 
         val now = System.currentTimeMillis()
@@ -44,8 +78,31 @@ class AlertController(context: Context, private val prefs: Prefs) {
         lastFireMs = now
         lastLevel = top
 
-        if (prefs.audibleAlerts) playTone(top)
+        // When voice is on it carries the message; keep only the urgent tone as an
+        // attention earcon ahead of speech, and drop the plain advisory beep so the
+        // two don't talk over each other. Voice off -> original tone behaviour.
+        val speak = prefs.voiceAlerts && ttsReady
+        if (prefs.audibleAlerts && (!speak || top == WarningLevel.IMMINENT)) playTone(top)
+        if (speak && topWarning != null) speak(topWarning)
         if (prefs.hapticAlerts) vibrate(top)
+    }
+
+    private fun speak(w: Warning) {
+        val phrase = when (w.type) {
+            WarningType.FORWARD_COLLISION -> if (w.level == WarningLevel.IMMINENT) "Brake. Collision warning" else "Collision warning"
+            WarningType.LANE_DEPARTURE -> when (w.side) {
+                Side.LEFT -> "Lane departure left"
+                Side.RIGHT -> "Lane departure right"
+                Side.NONE -> "Lane departure"
+            }
+            WarningType.HEADWAY -> "Too close"
+            WarningType.OVER_SPEED -> "Over speed limit"
+            WarningType.SPEED_LIMIT -> w.message            // announced via the dedicated path above
+            WarningType.STOP_SIGN -> "Stop sign"
+            WarningType.TRAFFIC_LIGHT -> "Traffic light"
+        }
+        // QUEUE_FLUSH: a newer, higher-urgency warning interrupts an in-progress phrase.
+        tts.speak(phrase, TextToSpeech.QUEUE_FLUSH, null, "adas-${w.type}")
     }
 
     private fun playTone(level: WarningLevel) = when (level) {
@@ -62,5 +119,6 @@ class AlertController(context: Context, private val prefs: Prefs) {
 
     fun release() {
         runCatching { tone.release() }
+        runCatching { tts.stop(); tts.shutdown() }
     }
 }

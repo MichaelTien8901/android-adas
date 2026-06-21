@@ -30,6 +30,7 @@
     <!-- Settings -->
     <string name="pref_audible">Audible alerts</string>
     <string name="pref_haptic">Haptic alerts</string>
+    <string name="pref_voice">Voice alerts (spoken)</string>
     <string name="pref_hud">HUD mirror mode</string>
     <string name="pref_fcw">Forward collision warning</string>
     <string name="pref_ldw">Lane departure warning</string>

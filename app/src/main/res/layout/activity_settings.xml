@@ -26,6 +26,8 @@
         <com.google.android.material.materialswitch.MaterialSwitch
             android:id="@+id/haptic" style="@style/SettingsSwitch" android:text="@string/pref_haptic" />
         <com.google.android.material.materialswitch.MaterialSwitch
+            android:id="@+id/voice" style="@style/SettingsSwitch" android:text="@string/pref_voice" />
+        <com.google.android.material.materialswitch.MaterialSwitch
             android:id="@+id/hud" style="@style/SettingsSwitch" android:text="@string/pref_hud" />
 
         <TextView style="@style/SettingsSection" android:text="Warning functions" />

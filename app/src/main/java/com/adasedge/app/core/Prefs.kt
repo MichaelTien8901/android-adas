@@ -22,6 +22,11 @@ class Prefs(context: Context) {
         get() = sp.getBoolean(KEY_HAPTIC, true)
         set(v) = sp.edit { putBoolean(KEY_HAPTIC, v) }
 
+    /** Spoken (text-to-speech) warnings, e.g. "Collision warning", "Over speed limit". */
+    var voiceAlerts: Boolean
+        get() = sp.getBoolean(KEY_VOICE, false)
+        set(v) = sp.edit { putBoolean(KEY_VOICE, v) }
+
     var hudMirror: Boolean
         get() = sp.getBoolean(KEY_HUD, false)
         set(v) = sp.edit { putBoolean(KEY_HUD, v) }
@@ -62,6 +67,7 @@ class Prefs(context: Context) {
         private const val KEY_DISCLAIMER = "disclaimer_accepted"
         private const val KEY_AUDIBLE = "audible"
         private const val KEY_HAPTIC = "haptic"
+        private const val KEY_VOICE = "voice"
         private const val KEY_HUD = "hud"
         private const val KEY_FCW = "fcw"
         private const val KEY_LDW = "ldw"

@@ -21,6 +21,7 @@ class TrafficSignWarning : WarningEvaluator {
     private var currentLimitKmh: Int? = null
     private var pendingLimitKmh: Int? = null
     private var pendingHits = 0
+    private var announcedLimitKmh: Int? = null
     private var distanceSinceConfirmM = 0f
     private var lastTsNanos = 0L
 
@@ -49,8 +50,16 @@ class TrafficSignWarning : WarningEvaluator {
 
         val out = ArrayList<Warning>()
 
-        // Over-speed warning (requires a known limit and valid speed).
+        // Announce each newly-detected limit once (e.g. spoken "Speed limit 50" on
+        // entering a zone). Fires when the active limit becomes a *new* value; the
+        // expiry path clears announcedLimitKmh so re-entering the same zone re-announces.
         val limit = currentLimitKmh
+        if (limit != null && limit != announcedLimitKmh) {
+            announcedLimitKmh = limit
+            out += Warning(WarningType.SPEED_LIMIT, WarningLevel.INFO, message = "Speed limit $limit")
+        }
+
+        // Over-speed warning (requires a known limit and valid speed).
         if (limit != null && speed.usable && speed.kmh > limit + Config.OVERSPEED_TOLERANCE_KMH) {
             out += Warning(WarningType.OVER_SPEED, WarningLevel.ADVISORY,
                 message = "Over limit: ${speed.kmh.toInt()} / $limit")
@@ -71,6 +80,6 @@ class TrafficSignWarning : WarningEvaluator {
             if (dt > 0f) distanceSinceConfirmM += speed.metersPerSecond * dt
         }
         lastTsNanos = result.frameTimestampNanos
-        if (distanceSinceConfirmM > Config.SIGN_STALE_AFTER_M) currentLimitKmh = null
+        if (distanceSinceConfirmM > Config.SIGN_STALE_AFTER_M) { currentLimitKmh = null; announcedLimitKmh = null }
     }
 }

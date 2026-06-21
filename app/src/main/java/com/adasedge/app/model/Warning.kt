@@ -1,6 +1,6 @@
 package com.adasedge.app.model
 
-enum class WarningType { FORWARD_COLLISION, LANE_DEPARTURE, HEADWAY, OVER_SPEED, STOP_SIGN, TRAFFIC_LIGHT }
+enum class WarningType { FORWARD_COLLISION, LANE_DEPARTURE, HEADWAY, OVER_SPEED, SPEED_LIMIT, STOP_SIGN, TRAFFIC_LIGHT }
 
 /** Urgency tiers; drives the HMI cue strength (advisory vs imminent). */
 enum class WarningLevel { NONE, INFO, ADVISORY, IMMINENT }
