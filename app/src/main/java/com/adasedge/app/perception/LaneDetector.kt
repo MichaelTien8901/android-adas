@@ -5,7 +5,6 @@ import com.adasedge.app.core.Config
 import com.adasedge.app.inference.ModelRunner
 import com.adasedge.app.inference.TensorOut
 import com.adasedge.app.model.LaneGeometry
-import kotlin.math.abs
 import kotlin.math.exp
 import kotlin.math.max
 import kotlin.math.min
@@ -117,7 +116,7 @@ class LaneDetector(
             pts += floatArrayOf(xFinal, y, exr.coerceIn(0.1f, 1f))   // [x, y, confidence weight]
         }
         if (pts.size < MIN_LANE_POINTS) return emptyList()
-        return polyfitSmooth(pts)
+        return smoothLane(pts)
     }
 
     /** Nudge x onto the brightest pixel in a small horizontal window at row y — but
@@ -140,48 +139,34 @@ class LaneDetector(
     }
 
     /**
-     * Robust quadratic fit x = a·y² + b·y + c, resampled at the same y's. Uses
-     * iteratively-reweighted least squares (IRLS): start from the per-point
-     * confidence weights (existence), then re-weight by a Cauchy function of the
-     * residual for a few passes so a confidently-wrong far-field outlier (which the
-     * model still flags existence≈1) is suppressed instead of bending the curve.
-     * Falls back to the raw points if the fit is degenerate.
+     * LOCAL smoothing of the per-row lane points (keeps them on the actual markings,
+     * unlike a global parabola which is too rigid and drifts off the dashed line):
+     *  1. a small median filter kills single-row outliers (e.g. a far-field column
+     *     jump) WITHOUT moving the good points, then
+     *  2. a short moving average removes the residual zig-zag.
+     * Points come in row order (y ascending), so the windows are along the lane.
      */
-    private fun polyfitSmooth(pts: List<FloatArray>): List<FloatArray> {
-        if (pts.size < 3) return pts
+    private fun smoothLane(pts: List<FloatArray>): List<FloatArray> {
         val n = pts.size
-        val w = FloatArray(n) { pts[it][2] }                       // confidence (existence) weight
-        var c = fitWeighted(pts, w) ?: return pts
-        repeat(IRLS_ITERS) {
-            for (i in 0 until n) {
-                val res = (pts[i][0] - evalQuad(c, pts[i][1])) / IRLS_SCALE
-                w[i] = pts[i][2] * (1f / (1f + res * res))          // Cauchy robust weight
-            }
-            c = fitWeighted(pts, w) ?: c
+        if (n < 3) return pts
+        val x = FloatArray(n) { pts[it][0] }
+        val med = FloatArray(n)
+        val win = FloatArray(2 * MED_RADIUS + 1)
+        for (i in 0 until n) {
+            val lo = max(0, i - MED_RADIUS); val hi = min(n - 1, i + MED_RADIUS)
+            var k = 0
+            for (j in lo..hi) win[k++] = x[j]
+            java.util.Arrays.sort(win, 0, k)
+            med[i] = win[k / 2]
         }
-        val cc = c
-        return pts.map { floatArrayOf(evalQuad(cc, it[1]).coerceIn(0f, 1f), it[1]) }
-    }
-
-    private fun evalQuad(c: FloatArray, y: Float) = c[0] * y * y + c[1] * y + c[2]
-
-    /** Weighted least-squares quadratic fit of x vs y; null if the matrix is singular. */
-    private fun fitWeighted(pts: List<FloatArray>, w: FloatArray): FloatArray? {
-        var s0 = 0.0; var s1 = 0.0; var s2 = 0.0; var s3 = 0.0; var s4 = 0.0
-        var t0 = 0.0; var t1 = 0.0; var t2 = 0.0
-        for (i in pts.indices) {
-            val y = pts[i][1].toDouble(); val x = pts[i][0].toDouble(); val wi = w[i].toDouble()
-            val y2 = y * y
-            s0 += wi; s1 += wi * y; s2 += wi * y2; s3 += wi * y2 * y; s4 += wi * y2 * y2
-            t0 += wi * x; t1 += wi * x * y; t2 += wi * x * y2
+        val out = ArrayList<FloatArray>(n)
+        for (i in 0 until n) {
+            val lo = max(0, i - AVG_RADIUS); val hi = min(n - 1, i + AVG_RADIUS)
+            var s = 0f
+            for (j in lo..hi) s += med[j]
+            out += floatArrayOf((s / (hi - lo + 1)).coerceIn(0f, 1f), pts[i][1])
         }
-        // Solve [[s4,s3,s2],[s3,s2,s1],[s2,s1,s0]] · [a,b,c] = [t2,t1,t0] (Cramer's rule).
-        val det = s4 * (s2 * s0 - s1 * s1) - s3 * (s3 * s0 - s1 * s2) + s2 * (s3 * s1 - s2 * s2)
-        if (abs(det) < 1e-12) return null
-        val a = (t2 * (s2 * s0 - s1 * s1) - s3 * (t1 * s0 - s1 * t0) + s2 * (t1 * s1 - s2 * t0)) / det
-        val b = (s4 * (t1 * s0 - t0 * s1) - t2 * (s3 * s0 - s1 * s2) + s2 * (s3 * t0 - t1 * s2)) / det
-        val cc = (s4 * (s2 * t0 - t1 * s1) - s3 * (s3 * t0 - t1 * s2) + t2 * (s3 * s1 - s2 * s2)) / det
-        return floatArrayOf(a.toFloat(), b.toFloat(), cc.toFloat())
+        return out
     }
 
     /** Mean existence probability over present ego-lane anchors (0.5 if none/no head). */
@@ -205,7 +190,7 @@ class LaneDetector(
         const val MIN_LANE_POINTS = 6
         const val SNAP_WINDOW_NORM = 0.025f   // horizontal search half-width (frac of width)
         const val SNAP_MIN_CONTRAST = 28      // peak must beat the local-window mean by this (0..255)
-        const val IRLS_ITERS = 3              // robust reweighting passes
-        const val IRLS_SCALE = 0.04f          // residual (norm-x) at which a point's weight halves
+        const val MED_RADIUS = 2              // median-filter window radius (kills single-row outliers)
+        const val AVG_RADIUS = 2              // moving-average window radius (de-zigzag)
     }
 }
