@@ -35,6 +35,15 @@ class PerceptionEngine(
     private val laneDetector = laneRunner?.let { LaneDetector(it, horizonRatio = calib.horizonRatio) }
     private val classicalLanes = ClassicalLaneFallback()
 
+    // Speed-limit sign recognition (task 7.6): OpenCV circles + GTSRB CNN. Optional —
+    // null when gtsrb.onnx is absent (over-speed simply never fires then).
+    private val signRunner: ModelRunner? = runCatching {
+        EngineFactory.create(context, "gtsrb", 3, 48, 48)
+    }.getOrNull()
+    private val speedLimit = signRunner?.let { SpeedLimitRecognizer(it) }
+    private var frameNo = 0L
+    private var lastSigns: List<com.adasedge.app.model.Detection> = emptyList()
+
     private val distance = DistanceEstimator(calib)
     private val ttc = TtcEstimator()
 
@@ -47,7 +56,12 @@ class PerceptionEngine(
         val w = frame.width; val h = frame.height
         return try {
             val detPrepared = Preprocess.toNchw(frame, Config.MODEL_INPUT_SIZE, Config.MODEL_INPUT_SIZE)
-            val detections = detector.detect(detPrepared, w, h)
+            val detected = detector.detect(detPrepared, w, h)
+
+            // Speed-limit signs: run the (heavier) recognizer every 3rd frame and
+            // carry the result on intermediate frames; the limit persists in TSR anyway.
+            speedLimit?.let { if (frameNo++ % 3L == 0L) lastSigns = runCatching { it.detect(frame) }.getOrDefault(emptyList()) }
+            val detections = if (lastSigns.isEmpty()) detected else detected + lastSigns
 
             val lanes = laneDetector?.let { ld ->
                 ld.detect(Preprocess.toLaneInput(frame, Config.LANE_INPUT_W, Config.LANE_INPUT_H, calib.horizonRatio, Config.LANE_CROP_RATIO))
@@ -74,7 +88,7 @@ class PerceptionEngine(
     }
 
     override fun close() {
-        detectorRunner.close(); laneRunner?.close()
+        detectorRunner.close(); laneRunner?.close(); signRunner?.close()
     }
 
     companion object { private const val TAG = "PerceptionEngine" }

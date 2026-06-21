@@ -58,13 +58,14 @@
 - [x] 7.2 LDW: departure detection, activation-speed gate + hysteresis, lane-availability gate, best-effort intent suppression (lane-departure-warning)
 - [x] 7.3 Headway: THW estimation, tailgating threshold with dwell + hysteresis, low-speed gating (headway-monitoring)
 - [x] 7.4 TSR: speed-limit recognition + persistence/expiry, over-speed warning with tolerance, best-effort stop/light cues (traffic-sign-recognition)
-      <!-- PARTIAL: over-speed logic (persistence/expiry/tolerance) is wired, and
-           stop-sign + traffic-light cues are validated on-device (S22+ replay,
-           ~0.85 conf). But speed-LIMIT recognition is NOT functional: YOLO11n
-           (COCO) has no speed-limit class, so SPEED_LIMIT_SIGN detections are
-           never produced and the over-speed warning can never fire. Needs 7.6. -->
+      <!-- COMPLETE as of 7.6: over-speed logic (persistence/expiry/tolerance) is
+           wired, stop-sign + traffic-light cues validated on-device (S22+ replay,
+           ~0.85 conf), and speed-LIMIT recognition is now functional via the
+           dedicated SpeedLimitRecognizer (7.6) — SPEED_LIMIT_SIGN detections carry
+           the value and the over-speed warning fires. (YOLO11n/COCO has no
+           speed-limit class, hence the separate GTSRB classifier.) -->
 - [x] 7.5 Wire all four evaluators to the perception contract + speed-context; make each independently toggleable
-- [ ] 7.6 Implement speed-limit sign recognition (the missing input for 7.4 over-speed): add a GTSRB-style classifier on detected sign regions (research/02 Phase 2) that emits `SPEED_LIMIT_SIGN` detections carrying the recognized value in `Detection.attribute`; export/quantize it like the other models and wire it into the perception pipeline. Optionally add a light-state classifier for red/yellow/green
+- [x] 7.6 Implement speed-limit sign recognition (the missing input for 7.4 over-speed) — DONE. `SpeedLimitRecognizer` (perception/): OpenCV `HoughCircles` proposes circular sign regions → a GTSRB-trained CNN (`SignNet`, tools/train_gtsrb.py, 6 epochs, **94.8% test acc; 100% on all 8 speed-limit classes 20–120**, `assets/models/gtsrb.onnx`) reads the value → emits `SPEED_LIMIT_SIGN` with the limit in `Detection.attribute`. Wired into `PerceptionEngine` (every 3rd frame, result persists). A **red-ring annulus gate** rejects the closed-set classifier's false positives (no "background" class → any circular road feature is forced into a class): validated end-to-end on a real-GTSRB-50 composite clip (SPEED_LIMIT fires, over-speed 70>55 warns) with **0/300 false positives on a sign-free road clip**. Light-state (red/yellow/green) classifier not added — traffic-light presence is surfaced as an INFO cue only.
 
 ## 8. Driver HMI (driver-alert-hmi)
 
