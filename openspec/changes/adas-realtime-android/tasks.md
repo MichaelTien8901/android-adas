@@ -88,6 +88,18 @@
 
 - [x] 9.1 End-to-end on S22+: measure glass-to-warning latency against the ≤~100 ms budget — instrumented the pipeline; perception+warning compute ~80-94 ms on the QNN_HTP path (NPU inference ~20 ms; remainder is CPU preprocessing). Within the ~100 ms budget; CPU preprocessing is the optimization lever, not inference.
 - [ ] 9.2 Validate each warning's activation/clear behavior against its spec scenarios (road or replayed footage)
+      <!-- IN PROGRESS. Harness: DrivingService now logs both WARN (activate) and
+           CLEAR (deactivate) transitions; tools/make_test_clip.py --scene speed
+           --limits A,B builds parameterized scenarios.
+           DONE — Over-speed: validated activate+clear on the S26. A 30→120 clip at
+           110 km/h fires OVER_SPEED in the 30 zone (110>35) and CLEARs at the 120
+           sign (110<125), then re-fires on loop. (Stop/traffic-light INFO cues also
+           seen firing earlier.)
+           REMAINING — FCW, LDW, Headway: each needs a lead-vehicle / lane-drift
+           scenario. Synthetic lanes drive UFLDv2 too noisily for a reliable LDW
+           clear, and FCW/headway need a YOLO-detectable lead vehicle (closing then
+           opening) — best done with short real dashcam clips. -->
+- [ ] 9.2b (cont.) FCW / LDW / Headway activate+clear scenarios — see note above
 - [x] 9.3 Validate degraded-mode behavior: GPS dropout (tunnel), thermal throttle, non-Snapdragon fallback — non-v69-Snapdragon fallback VALIDATED on the S26 (SM8850): unrecognized SoC -> htp=null -> QNN skipped -> detector/lane -> CPU, app runs fine with NO NPU chip (the 'mismatched/missing context binary' path). Thermal chip split from low-FPS validated earlier. GPS-dropout scenario (replay injects synthetic speed) still pending a live-GPS test.
 - [x] 9.4 Deploy & benchmark on S26 Ultra — app runs on the S26 v81 NPU (detector/lane -> QNN_HTP, ~54-58 ms perception, ~3x faster than its CPU and faster than the S22+ v69 ~85 ms, as expected for the Elite Gen 5). Same APK serves both devices via per-arch context binary selection (v69 S22+ / v81 S26). Sustained/post-throttle FPS curve still TODO (thermal loop skipped). 16 KB-page support added for the S26/Android 16: libadas_qnn.so linked 16 KB-aligned, deps bumped (CameraX 1.4.2 / OpenCV 4.11 / ORT 1.22 / TFLite 2.17), and a 16 KB libc++_shared.so (NDK r27, pickFirst) overrides OpenCV's 4 KB one — all 13 native libs 16 KB-aligned, no compatibility prompt.
 - [ ] 9.5 Resolve the YOLO11n AGPL-3.0 licensing decision (enterprise license vs detector swap) before distribution

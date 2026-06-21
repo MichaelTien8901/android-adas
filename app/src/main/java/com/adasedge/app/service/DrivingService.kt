@@ -188,6 +188,10 @@ class DrivingService : LifecycleService() {
                 val lead = r.lead?.let { " lead=%.0fm ttc=%.1fs".format(it.distanceMeters, it.ttcSeconds) } ?: ""
                 Log.i(TAG, "WARN ${added.joinToString()}$lead dets=${r.detections.size} lanes=${r.lanes != null}")
             }
+            // Log clears too, so a warning's activation AND clear behaviour is observable
+            // for replay validation (task 9.2). Skip INFO cues (transient sign/announce).
+            val cleared = (lastWarnKeys - keys).filterNot { it.endsWith(":INFO") }
+            if (cleared.isNotEmpty()) Log.i(TAG, "CLEAR ${cleared.joinToString()}")
             lastWarnKeys = keys
         }
     }

@@ -34,6 +34,7 @@ W, H, FPS, SEC = 1280, 720, 15, 5
 
 # GTSRB class id -> speed limit (km/h); mirrors tools/train_gtsrb.py.
 GTSRB_ROOT = "build/gtsrb/gtsrb/GTSRB/Training"
+LIMIT_TO_CLASS = {20: 0, 30: 1, 50: 2, 60: 3, 70: 4, 80: 5, 100: 7, 120: 8}
 
 
 def _font(sz):
@@ -134,11 +135,14 @@ def main():
     ap.add_argument("--scene", choices=SCENES, default="signs")
     ap.add_argument("--out", default="build/test_signs.mp4")
     ap.add_argument("--seconds", type=int, default=0, help="override clip length (speed scene defaults to 8s)")
+    ap.add_argument("--limits", default="50,30",
+                    help="speed scene: two limits (km/h) shown in sequence, e.g. 30,120 to fire then clear over-speed")
     args = ap.parse_args()
 
     if args.scene == "speed":
         sec = args.seconds or 8
-        sa, sb = _gtsrb_sign(2), _gtsrb_sign(1)      # 50, 30 km/h
+        la, lb = (int(v) for v in args.limits.split(","))
+        sa, sb = _gtsrb_sign(LIMIT_TO_CLASS[la]), _gtsrb_sign(LIMIT_TO_CLASS[lb])
         render = lambda u: speed_frame(u, sa, sb)
     else:
         sec = args.seconds or SEC
