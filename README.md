@@ -57,7 +57,7 @@ you regenerate them with the fetch scripts. The small speed-limit classifier
 ```bash
 # exported into app/src/main/assets/models/
 tools/fetch_detector.sh          # YOLO11n  -> detector.onnx (~11 MB, stock Ultralytics)
-tools/fetch_lane.sh              # UFLDv2   -> lane.onnx (~93 MB, INT8, TuSimple res18)
+tools/fetch_lane.sh              # UFLDv2   -> lane.onnx (~130 MB, INT8-dynamic, TuSimple res18)
 # gtsrb.onnx (speed-limit classifier) is already in the repo — retrain only if you want (see "Training" below)
 ```
 
@@ -74,8 +74,10 @@ adb install -r app/build/outputs/apk/debug/app-debug.apk
 ```
 **One APK serves both phones** — the inference path is chosen at runtime, no
 per-device build:
-- **CPU / ONNX-Runtime** (no QNN SDK): runs on any arm64 device. Verify in logcat
-  `EngineFactory: detector -> CPU` (or `-> ORT_QNN` on Snapdragon).
+- **CPU / ONNX-Runtime** (no QNN SDK): runs on any arm64 device, on the CPU —
+  verify `EngineFactory: detector -> CPU` (confirmed on the S26). The Hexagon NPU
+  path needs the QNN build below; ORT's QNN-EP and the native HTP bridge both
+  require the bundled QNN runtime libs, which this build doesn't ship.
 - **NPU / Hexagon HTP** (QNN SDK present): the APK bundles per-arch context
   binaries and selects one per device — **S22+ → `detector_v69.bin`**,
   **S26 Ultra → `detector_v81.bin`**. Verify `detector -> QNN_HTP`,
@@ -98,8 +100,8 @@ ImageNet normalization, and INT8-quantizes (UFLDv2's FC head is ~96M params —
 
 **Without the models** the app still builds and launches camera-only with a
 "models missing" notice; lanes fall back to classical OpenCV CV when `lane.onnx`
-is absent. To verify which path is live, check logcat: `detector -> CPU`
-(or `-> ORT_QNN` on Snapdragon).
+is absent. To verify which path is live, check logcat: `detector -> CPU` for this
+fallback build (`-> QNN_HTP` once you add the QNN build below).
 
 ### Training the speed-limit classifier (GTSRB)
 The speed-limit recognizer (task 7.6) proposes circular sign regions with OpenCV

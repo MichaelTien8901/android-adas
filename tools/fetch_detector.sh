@@ -58,5 +58,5 @@ PY
 
 SZ=$(du -h "$OUT" | cut -f1)
 echo ">> Done: $OUT ($SZ)"
-echo "   Build & run on a device; EngineFactory will pick the ORT path"
-echo "   (logcat: 'detector -> ORT_QNN' on Snapdragon, else 'detector -> CPU')."
+echo "   Build & run on a device; without the QNN runtime libs EngineFactory runs"
+echo "   it on CPU (logcat: 'detector -> CPU'). Add the QNN build for 'detector -> QNN_HTP'."
