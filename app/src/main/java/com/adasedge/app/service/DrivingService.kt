@@ -61,6 +61,10 @@ class DrivingService : LifecycleService() {
     private var replayActive = false
     private var lastWarnKeys = emptySet<String>()
 
+    /** When false, skip publishing the frame backdrop (overlay-only — saves the
+        per-frame scaled-copy; toggled from the driving screen to speed up FPS). */
+    @Volatile var showFeed: Boolean = true
+
     /** Replay-mode only: the decoded frame, for the overlay backdrop (null = live camera). */
     private val _replayFrame = MutableStateFlow<Bitmap?>(null)
     val replayFrame: StateFlow<Bitmap?> = _replayFrame.asStateFlow()
@@ -125,7 +129,7 @@ class DrivingService : LifecycleService() {
         try {
             val computeStart = System.nanoTime()
             val result = engine.process(bitmap, tsNanos)
-            if (replayActive) publishReplayFrame(bitmap)
+            if (replayActive && showFeed) publishReplayFrame(bitmap)
             val spd = if (replayActive) syntheticSpeed() else speed.tick()
             val warns = warnings.evaluate(result, spd)
             // Latency budget (task 9.1): perception + warning compute per frame.

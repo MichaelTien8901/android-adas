@@ -6,9 +6,11 @@ import android.content.Intent
 import android.content.ServiceConnection
 import android.os.Bundle
 import android.os.IBinder
+import android.view.View
 import android.view.WindowManager
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
+import com.adasedge.app.R
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
@@ -49,7 +51,19 @@ class DrivingActivity : AppCompatActivity() {
 
         binding.overlay.hudMirror = prefs.hudMirror
         binding.stopButton.setOnClickListener { stopDriving() }
+
+        // Toggle the camera/backdrop feed off to save the per-frame display cost
+        // (overlay boxes/lanes/warnings stay). Helps FPS, esp. in replay.
+        binding.feedButton.setOnClickListener {
+            feedOn = !feedOn
+            binding.feedButton.setText(if (feedOn) R.string.feed_on else R.string.feed_off)
+            binding.previewView.visibility = if (feedOn) View.VISIBLE else View.GONE
+            service?.showFeed = feedOn
+            if (!feedOn) binding.overlay.submitBackground(null)
+        }
     }
+
+    private var feedOn = true
 
     override fun onStart() {
         super.onStart()
