@@ -33,6 +33,7 @@ class SettingsActivity : AppCompatActivity() {
             headway.bind(prefs.headwayEnabled) { prefs.headwayEnabled = it }
             tsr.bind(prefs.tsrEnabled) { prefs.tsrEnabled = it }
             markingSnap.bind(prefs.laneMarkingSnap) { prefs.laneMarkingSnap = it }
+            birdEye.bind(prefs.birdEyeLaneFit) { prefs.birdEyeLaneFit = it }
             replay.bind(prefs.replayMode) { prefs.replayMode = it }
             calibrateButton.setOnClickListener {
                 startActivity(Intent(this@SettingsActivity, CalibrationActivity::class.java))

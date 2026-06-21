@@ -49,10 +49,37 @@ class LaneDetector(
     private val rowAnchorMax: Float = 710f / 720f,   // 0.9861
     // Temporal low-pass factor on each row's column (1.0 = no smoothing).
     private val temporalAlpha: Float = 0.5f,
+    private val centerRatio: Float = Calibration.DEFAULT.centerRatio,
+    // Fit lanes in a bird's-eye (top-down) view where they're straight & parallel.
+    private val birdEyeFit: Boolean = false,
 ) {
     // Per-row temporal EMA of each ego lane's column (normalized x); NaN = unset.
     private val smoothLeft = FloatArray(numRow) { Float.NaN }
     private val smoothRight = FloatArray(numRow) { Float.NaN }
+
+    // Homographies for the bird's-eye fit (perspective <-> top-down), built once from
+    // the calibration: the road trapezoid -> a rectangle, so lanes become ~vertical.
+    private val bevH: DoubleArray? = if (birdEyeFit) bevHomography(false) else null
+    private val bevHinv: DoubleArray? = if (birdEyeFit) bevHomography(true) else null
+
+    private fun bevHomography(inverse: Boolean): DoubleArray {
+        val c = centerRatio.toDouble()
+        val src = org.opencv.core.MatOfPoint2f(
+            org.opencv.core.Point(c - BEV_TOP_HALF, horizonRatio.toDouble()),
+            org.opencv.core.Point(c + BEV_TOP_HALF, horizonRatio.toDouble()),
+            org.opencv.core.Point(c + BEV_BOT_HALF, roadBottomRatio.toDouble()),
+            org.opencv.core.Point(c - BEV_BOT_HALF, roadBottomRatio.toDouble()),
+        )
+        val dst = org.opencv.core.MatOfPoint2f(
+            org.opencv.core.Point(BEV_X0, 0.0), org.opencv.core.Point(BEV_X1, 0.0),
+            org.opencv.core.Point(BEV_X1, 1.0), org.opencv.core.Point(BEV_X0, 1.0),
+        )
+        val m = if (inverse) org.opencv.imgproc.Imgproc.getPerspectiveTransform(dst, src)
+                else org.opencv.imgproc.Imgproc.getPerspectiveTransform(src, dst)
+        val arr = DoubleArray(9); m.get(0, 0, arr)
+        m.release(); src.release(); dst.release()
+        return arr
+    }
 
     /**
      * @param gray optional full-frame grayscale (row-major, 0..255, [grayW]x[grayH])
@@ -65,12 +92,17 @@ class LaneDetector(
         val loc = outs.firstOrNull { it.data.size >= numLanes * numRow * griding } ?: return null
         val exist = outs.firstOrNull { it !== loc && it.data.size >= numLanes * numRow }
 
-        val left = decodeLane(loc, exist, EGO_LEFT_LANE, smoothLeft, gray, grayW, grayH)
-        val right = decodeLane(loc, exist, EGO_RIGHT_LANE, smoothRight, gray, grayW, grayH)
-        if (left.isEmpty() && right.isEmpty()) return null
+        val leftRaw = decodeLane(loc, exist, EGO_LEFT_LANE, smoothLeft, gray, grayW, grayH)
+        val rightRaw = decodeLane(loc, exist, EGO_RIGHT_LANE, smoothRight, gray, grayW, grayH)
+        if (leftRaw.isEmpty() && rightRaw.isEmpty()) return null
 
-        val conf = existenceConfidence(exist)
-        return LaneGeometry(left, right, conf)
+        val (left, right) = if (birdEyeFit && bevH != null && bevHinv != null) {
+            bevFit(leftRaw, rightRaw)
+        } else {
+            (if (leftRaw.isEmpty()) emptyList() else smoothLane(leftRaw)) to
+                (if (rightRaw.isEmpty()) emptyList() else smoothLane(rightRaw))
+        }
+        return LaneGeometry(left, right, existenceConfidence(exist))
     }
 
     /** Decode one ego lane: soft-argmax per row, existence-gated, temporally smoothed,
@@ -115,8 +147,7 @@ class LaneDetector(
             val xFinal = if (gray != null) snapToMarking(xs, y, gray, grayW, grayH) else xs
             pts += floatArrayOf(xFinal, y, exr.coerceIn(0.1f, 1f))   // [x, y, confidence weight]
         }
-        if (pts.size < MIN_LANE_POINTS) return emptyList()
-        return smoothLane(pts)
+        return if (pts.size < MIN_LANE_POINTS) emptyList() else pts   // raw [x,y,weight]; smoothed/fit by caller
     }
 
     /** Nudge x onto the brightest pixel in a small horizontal window at row y — but
@@ -169,6 +200,87 @@ class LaneDetector(
         return out
     }
 
+    /**
+     * Bird's-eye fit: warp the points to the top-down view (where lanes are straight
+     * & parallel), robustly fit each lane there (a quadratic now MATCHES the geometry,
+     * unlike in perspective), then COUPLE them — the cleaner lane (lower residual,
+     * usually the solid one) lends its curvature (a,b) to both, and each solves only
+     * its own offset c. So the noisy dashed boundary inherits the solid line's shape.
+     * Finally warp the fitted points back to perspective for drawing.
+     */
+    private fun bevFit(leftRaw: List<FloatArray>, rightRaw: List<FloatArray>): Pair<List<FloatArray>, List<FloatArray>> {
+        val h = bevH!!; val hinv = bevHinv!!
+        val lb = leftRaw.map { warp(it, h) }
+        val rb = rightRaw.map { warp(it, h) }
+        var fL = if (lb.size >= 3) robustQuad(lb) else null
+        var fR = if (rb.size >= 3) robustQuad(rb) else null
+        if (fL != null && fR != null) {
+            val a: Float; val b: Float
+            if (fL.second <= fR.second) { a = fL.first[0]; b = fL.first[1] } else { a = fR.first[0]; b = fR.first[1] }
+            fL = floatArrayOf(a, b, offsetC(lb, a, b)) to fL.second
+            fR = floatArrayOf(a, b, offsetC(rb, a, b)) to fR.second
+        }
+        val left = fL?.let { resampleBack(lb, it.first, hinv) } ?: emptyList()
+        val right = fR?.let { resampleBack(rb, it.first, hinv) } ?: emptyList()
+        return left to right
+    }
+
+    /** Apply a 3x3 homography to a normalized point; keeps the weight (3rd element). */
+    private fun warp(p: FloatArray, m: DoubleArray): FloatArray {
+        val x = p[0].toDouble(); val y = p[1].toDouble()
+        val w = m[6] * x + m[7] * y + m[8]
+        return floatArrayOf(((m[0] * x + m[1] * y + m[2]) / w).toFloat(),
+            ((m[3] * x + m[4] * y + m[5]) / w).toFloat(), if (p.size > 2) p[2] else 1f)
+    }
+
+    /** Weighted mean offset c given shared curvature (a,b): c = mean(x - a·y² - b·y). */
+    private fun offsetC(pts: List<FloatArray>, a: Float, b: Float): Float {
+        var s = 0f; var ws = 0f
+        for (p in pts) { val w = p[2]; s += w * (p[0] - a * p[1] * p[1] - b * p[1]); ws += w }
+        return if (ws > 0f) s / ws else 0f
+    }
+
+    private fun resampleBack(pts: List<FloatArray>, c: FloatArray, hinv: DoubleArray): List<FloatArray> =
+        pts.map {
+            val yb = it[1]; val xb = c[0] * yb * yb + c[1] * yb + c[2]
+            val p = warp(floatArrayOf(xb, yb), hinv)
+            floatArrayOf(p[0].coerceIn(0f, 1f), p[1].coerceIn(0f, 1f))
+        }
+
+    /** IRLS robust quadratic fit x = a·y² + b·y + c; returns coeffs + median |residual|. */
+    private fun robustQuad(pts: List<FloatArray>): Pair<FloatArray, Float> {
+        val n = pts.size
+        val w = FloatArray(n) { pts[it][2] }
+        var c = fitWeighted(pts, w) ?: floatArrayOf(0f, 0f, pts[n / 2][0])
+        repeat(IRLS_ITERS) {
+            for (i in 0 until n) {
+                val res = (pts[i][0] - (c[0] * pts[i][1] * pts[i][1] + c[1] * pts[i][1] + c[2])) / IRLS_SCALE
+                w[i] = pts[i][2] / (1f + res * res)
+            }
+            c = fitWeighted(pts, w) ?: c
+        }
+        val resids = pts.map { kotlin.math.abs(it[0] - (c[0] * it[1] * it[1] + c[1] * it[1] + c[2])) }.sorted()
+        return c to resids[resids.size / 2]
+    }
+
+    /** Weighted least-squares quadratic fit of x vs y; null if the matrix is singular. */
+    private fun fitWeighted(pts: List<FloatArray>, w: FloatArray): FloatArray? {
+        var s0 = 0.0; var s1 = 0.0; var s2 = 0.0; var s3 = 0.0; var s4 = 0.0
+        var t0 = 0.0; var t1 = 0.0; var t2 = 0.0
+        for (i in pts.indices) {
+            val y = pts[i][1].toDouble(); val x = pts[i][0].toDouble(); val wi = w[i].toDouble()
+            val y2 = y * y
+            s0 += wi; s1 += wi * y; s2 += wi * y2; s3 += wi * y2 * y; s4 += wi * y2 * y2
+            t0 += wi * x; t1 += wi * x * y; t2 += wi * x * y2
+        }
+        val det = s4 * (s2 * s0 - s1 * s1) - s3 * (s3 * s0 - s1 * s2) + s2 * (s3 * s1 - s2 * s2)
+        if (kotlin.math.abs(det) < 1e-12) return null
+        val a = (t2 * (s2 * s0 - s1 * s1) - s3 * (t1 * s0 - s1 * t0) + s2 * (t1 * s1 - s2 * t0)) / det
+        val b = (s4 * (t1 * s0 - t0 * s1) - t2 * (s3 * s0 - s1 * s2) + s2 * (s3 * t0 - t1 * s2)) / det
+        val cc = (s4 * (s2 * t0 - t1 * s1) - s3 * (s3 * t0 - t1 * s2) + t2 * (s3 * s1 - s2 * s2)) / det
+        return floatArrayOf(a.toFloat(), b.toFloat(), cc.toFloat())
+    }
+
     /** Mean existence probability over present ego-lane anchors (0.5 if none/no head). */
     private fun existenceConfidence(exist: TensorOut?): Float {
         if (exist == null) return 0.5f
@@ -192,5 +304,12 @@ class LaneDetector(
         const val SNAP_MIN_CONTRAST = 28      // peak must beat the local-window mean by this (0..255)
         const val MED_RADIUS = 2              // median-filter window radius (kills single-row outliers)
         const val AVG_RADIUS = 2              // moving-average window radius (de-zigzag)
+        const val IRLS_ITERS = 3             // robust reweighting passes (bird's-eye fit)
+        const val IRLS_SCALE = 0.05f         // BEV residual (norm) at which a point's weight halves
+        // Bird's-eye source trapezoid (road) half-widths, normalized; -> a rectangle.
+        const val BEV_TOP_HALF = 0.06        // near the horizon (lanes nearly meet)
+        const val BEV_BOT_HALF = 0.42        // near the camera (lanes wide)
+        const val BEV_X0 = 0.25              // destination rectangle left/right
+        const val BEV_X1 = 0.75
     }
 }

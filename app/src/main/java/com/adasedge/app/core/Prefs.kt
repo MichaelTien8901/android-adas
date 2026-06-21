@@ -33,6 +33,13 @@ class Prefs(context: Context) {
         get() = sp.getBoolean(KEY_MARKING_SNAP, false)
         set(v) = sp.edit { putBoolean(KEY_MARKING_SNAP, v) }
 
+    /** Experimental: fit lanes in a bird's-eye (top-down) view where they're straight &
+        parallel — more robust to dashed-line outliers; the solid boundary anchors the
+        dashed one. Uses the horizon/hood/centre calibration for the warp. */
+    var birdEyeLaneFit: Boolean
+        get() = sp.getBoolean(KEY_BEV_FIT, false)
+        set(v) = sp.edit { putBoolean(KEY_BEV_FIT, v) }
+
     var hudMirror: Boolean
         get() = sp.getBoolean(KEY_HUD, false)
         set(v) = sp.edit { putBoolean(KEY_HUD, v) }
@@ -87,6 +94,7 @@ class Prefs(context: Context) {
         private const val KEY_HAPTIC = "haptic"
         private const val KEY_VOICE = "voice"
         private const val KEY_MARKING_SNAP = "lane_marking_snap"
+        private const val KEY_BEV_FIT = "bird_eye_lane_fit"
         private const val KEY_HUD = "hud"
         private const val KEY_FCW = "fcw"
         private const val KEY_LDW = "ldw"

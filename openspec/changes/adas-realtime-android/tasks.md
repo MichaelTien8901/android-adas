@@ -48,6 +48,12 @@
       curve coefficients `[a,b,c]`, and lane-width/parallel coupling so the solid
       boundary anchors the noisy dashed one. Options + sources in
       `research/06-lane-fitting-dashed-lanes.md`.
+      (Done so far: local median+moving-average smoothing on the perspective points.)
+- [ ] 5.9 Bird's-eye (IPM) lane fitting (research/06 §C/E): warp the per-row NN
+      lane points to a top-down view (homography from the horizon/hood/centre
+      calibration), where lanes are straight & parallel, fit there with robust
+      rejection + a parallel/lane-width coupling (solid boundary anchors the dashed
+      one), then warp back to draw. Behind a Settings toggle (default off).
 - [x] 5.7 Lateral center calibration: a camera mounted off-centre / angled makes the straight-ahead point sit away from image x=0.5, biasing lane-departure judgement. Add a calibratable `centerRatio` (Calibration + Prefs, default 0.5) — a third draggable VERTICAL line in the guided calibration — and use it as the ego reference in `LaneDepartureWarning` (replace the hardcoded `ego = 0.5f`) and in the lead-vehicle in-path band (`PerceptionEngine.selectLead` 0.30–0.70).
 
 ## 6. Speed-context service (speed-context)
