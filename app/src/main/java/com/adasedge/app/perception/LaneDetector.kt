@@ -5,6 +5,7 @@ import com.adasedge.app.core.Config
 import com.adasedge.app.inference.ModelRunner
 import com.adasedge.app.inference.TensorOut
 import com.adasedge.app.model.LaneGeometry
+import kotlin.math.abs
 import kotlin.math.exp
 import kotlin.math.max
 import kotlin.math.min
@@ -100,7 +101,47 @@ class LaneDetector(
 
             pts += floatArrayOf(xs, y)
         }
-        return if (pts.size >= MIN_LANE_POINTS) pts else emptyList()
+        if (pts.size < MIN_LANE_POINTS) return emptyList()
+        return polyfitSmooth(pts)
+    }
+
+    /**
+     * Replace the raw per-row points with a quadratic least-squares fit x = a·y² +
+     * b·y + c (one outlier-rejection pass), resampled at the same y's. A lane is a
+     * smooth curve, so this removes the spatial zig-zag (e.g. from dashed markings)
+     * that per-row argmax leaves behind. Falls back to the raw points if the fit is
+     * degenerate.
+     */
+    private fun polyfitSmooth(pts: List<FloatArray>): List<FloatArray> {
+        var c = fitQuadratic(pts) ?: return pts
+        // Drop points far from the fit, then refit once for robustness to outliers.
+        val res = pts.map { abs(it[0] - evalQuad(c, it[1])) }
+        val thr = max(0.03f, 2.5f * res.sorted()[res.size / 2])
+        val inliers = pts.filterIndexed { i, _ -> res[i] <= thr }
+        if (inliers.size in MIN_LANE_POINTS until pts.size) c = fitQuadratic(inliers) ?: c
+        val cc = c
+        return pts.map { floatArrayOf(evalQuad(cc, it[1]).coerceIn(0f, 1f), it[1]) }
+    }
+
+    private fun evalQuad(c: FloatArray, y: Float) = c[0] * y * y + c[1] * y + c[2]
+
+    /** Least-squares quadratic fit of x vs y; null if the normal matrix is singular. */
+    private fun fitQuadratic(pts: List<FloatArray>): FloatArray? {
+        var s0 = 0.0; var s1 = 0.0; var s2 = 0.0; var s3 = 0.0; var s4 = 0.0
+        var t0 = 0.0; var t1 = 0.0; var t2 = 0.0
+        for (p in pts) {
+            val y = p[1].toDouble(); val x = p[0].toDouble()
+            val y2 = y * y
+            s0 += 1.0; s1 += y; s2 += y2; s3 += y2 * y; s4 += y2 * y2
+            t0 += x; t1 += x * y; t2 += x * y2
+        }
+        // Solve [[s4,s3,s2],[s3,s2,s1],[s2,s1,s0]] · [a,b,c] = [t2,t1,t0] (Cramer's rule).
+        val det = s4 * (s2 * s0 - s1 * s1) - s3 * (s3 * s0 - s1 * s2) + s2 * (s3 * s1 - s2 * s2)
+        if (abs(det) < 1e-12) return null
+        val a = (t2 * (s2 * s0 - s1 * s1) - s3 * (t1 * s0 - s1 * t0) + s2 * (t1 * s1 - s2 * t0)) / det
+        val b = (s4 * (t1 * s0 - t0 * s1) - t2 * (s3 * s0 - s1 * s2) + s2 * (s3 * t0 - t1 * s2)) / det
+        val cc = (s4 * (s2 * t0 - t1 * s1) - s3 * (s3 * t0 - t1 * s2) + t2 * (s3 * s1 - s2 * s2)) / det
+        return floatArrayOf(a.toFloat(), b.toFloat(), cc.toFloat())
     }
 
     /** Mean existence probability over present ego-lane anchors (0.5 if none/no head). */
