@@ -33,13 +33,14 @@ object DeviceInfo {
     fun htpArch(): String? = htpArchFor(boardPlatform.lowercase(), socModel.uppercase())
 
     private fun htpArchFor(platform: String, soc: String): String? = when {
-        // Galaxy S22+ — SM8450, confirmed.
+        // Galaxy S22+ — SM8450, confirmed on-device.
         platform == "taro" || soc == "SM8450" -> "v69"
-        // Snapdragon 8 Elite Gen 5 (S26 family). Platform id TBD — confirm on-device.
-        platform == "kaanapali" || soc.startsWith("SM8950") -> "v81"
+        // Galaxy S26 Ultra — SM8850 (8 Elite Gen 5), confirmed on-device (platform=canoe).
+        platform == "canoe" || soc == "SM8850" -> "v81"
         // Best-effort for nearby Snapdragons (dev convenience only).
         platform == "kalama" || soc == "SM8550" -> "v73"   // 8 Gen 2
         platform == "pineapple" || soc == "SM8650" -> "v75" // 8 Gen 3
+        soc == "SM8750" -> "v79"                            // 8 Elite
         else -> null
     }
 
@@ -49,10 +50,11 @@ object DeviceInfo {
      * Returns -1 when unknown.
      */
     fun socId(): Int = when (socModel.uppercase()) {
-        "SM8450" -> 43        // S22+ (confirmed)
+        "SM8450" -> 36        // S22+ (confirmed; v69 binary built with soc_id 36)
+        "SM8850" -> 660       // S26 Ultra, 8 Elite Gen 5 (informational; v81 binary keys off dsp_arch)
         "SM8550" -> 57        // 8 Gen 2
         "SM8650" -> 69        // 8 Gen 3
-        else -> -1            // Elite Gen 5 / unknown — confirm on-device
+        else -> -1            // unknown — falls back
     }
 
     fun summary(): String =

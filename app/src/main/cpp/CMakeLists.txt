@@ -36,6 +36,12 @@ target_include_directories(adas_qnn PRIVATE
 
 target_compile_options(adas_qnn PRIVATE -fexceptions -frtti -Wno-unused-parameter)
 
+# 16 KB page alignment — required by Android 15+/16 devices (e.g. S26 / 8 Elite
+# Gen 5) that use 16 KB memory pages, else "LOAD segment not aligned" at load.
+target_link_options(adas_qnn PRIVATE
+  "-Wl,-z,max-page-size=16384"
+  "-Wl,-z,common-page-size=16384")
+
 find_library(log-lib log)
 # libQnnHtp.so / libQnnSystem.so are dlopen'd at runtime from jniLibs/arm64-v8a.
 target_link_libraries(adas_qnn ${log-lib} ${CMAKE_DL_LIBS})

@@ -14,6 +14,7 @@ set -euo pipefail
 : "${QNN_SDK_ROOT:?set QNN_SDK_ROOT to your QAIRT/QNN SDK (see tools/README_qnn.md)}"
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 APP="$QNN_SDK_ROOT/examples/QNN/SampleApp"
+[ -d "$APP/src/Utils" ] || APP="$APP/SampleApp"   # QAIRT >= 2.4x nests it one deeper
 DST="$ROOT/app/src/main/cpp/qnn"
 
 echo ">> Vendoring SampleApp helper sources -> $DST"
@@ -28,15 +29,18 @@ if ! grep -q "floatToNative" "$DST/Utils/IOTensor.hpp"; then
   sed -i 's/^ public:/ public:\n  StatusCode floatToNative(float *f, Qnn_Tensor_t *t) { return copyFromFloatToNative(f, t); }\n  StatusCode nativeToFloat(float **o, Qnn_Tensor_t *t) { return convertToFloat(o, t); }/' "$DST/Utils/IOTensor.hpp"
 fi
 
-echo ">> Vendoring arm64 runtime libs -> jniLibs/arm64-v8a"
+echo ">> Vendoring arm64 runtime libs -> jniLibs/arm64-v8a (v69 S22+, v81 S26)"
 mkdir -p "$ROOT/app/src/main/jniLibs/arm64-v8a"
-for f in libQnnHtp.so libQnnSystem.so libQnnHtpV69Stub.so; do
-  cp "$QNN_SDK_ROOT/lib/aarch64-android/$f" "$ROOT/app/src/main/jniLibs/arm64-v8a/"
+for f in libQnnHtp.so libQnnSystem.so libQnnHtpV69Stub.so libQnnHtpV81Stub.so; do
+  cp "$QNN_SDK_ROOT/lib/aarch64-android/$f" "$ROOT/app/src/main/jniLibs/arm64-v8a/" 2>/dev/null || \
+    echo "   (skip $f — not in this SDK)"
 done
 
-echo ">> Vendoring v69 Hexagon skel -> assets/models/dsp"
+echo ">> Vendoring Hexagon skels -> assets/models/dsp (v69 S22+, v81 S26)"
 mkdir -p "$ROOT/app/src/main/assets/models/dsp"
 cp "$QNN_SDK_ROOT/lib/hexagon-v69/unsigned/libQnnHtpV69Skel.so" "$ROOT/app/src/main/assets/models/dsp/"
+cp "$QNN_SDK_ROOT/lib/hexagon-v81/unsigned/libQnnHtpV81Skel.so" "$ROOT/app/src/main/assets/models/dsp/" 2>/dev/null || \
+  echo "   (skip v81 skel — needs QAIRT >= 2.47)"
 
 echo ">> Done. Place detector_v69.bin / lane_v69.bin in app/src/main/assets/models/,"
 echo "   then build with QNN_SDK_ROOT set to compile libadas_qnn.so."
