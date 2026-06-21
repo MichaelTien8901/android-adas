@@ -56,6 +56,14 @@
             android:text="@string/pref_calibrate_hint"
             android:textColor="@color/text_muted" android:textSize="13sp" />
 
+        <com.google.android.material.materialswitch.MaterialSwitch
+            android:id="@+id/markingSnap" style="@style/SettingsSwitch" android:text="@string/pref_marking_snap" />
+        <TextView
+            android:layout_width="match_parent" android:layout_height="wrap_content"
+            android:layout_marginBottom="8dp" android:lineSpacingMultiplier="1.25"
+            android:text="@string/pref_marking_snap_hint"
+            android:textColor="@color/text_muted" android:textSize="13sp" />
+
         <TextView style="@style/SettingsSection" android:text="@string/settings_validation" />
 
         <com.google.android.material.materialswitch.MaterialSwitch

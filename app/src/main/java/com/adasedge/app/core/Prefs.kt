@@ -27,6 +27,12 @@ class Prefs(context: Context) {
         get() = sp.getBoolean(KEY_VOICE, false)
         set(v) = sp.edit { putBoolean(KEY_VOICE, v) }
 
+    /** Experimental: snap detected lane points onto bright road markings before fitting
+        (hybrid refinement). Costs a few ms/frame; can mis-snap on glary scenes. */
+    var laneMarkingSnap: Boolean
+        get() = sp.getBoolean(KEY_MARKING_SNAP, false)
+        set(v) = sp.edit { putBoolean(KEY_MARKING_SNAP, v) }
+
     var hudMirror: Boolean
         get() = sp.getBoolean(KEY_HUD, false)
         set(v) = sp.edit { putBoolean(KEY_HUD, v) }
@@ -80,6 +86,7 @@ class Prefs(context: Context) {
         private const val KEY_AUDIBLE = "audible"
         private const val KEY_HAPTIC = "haptic"
         private const val KEY_VOICE = "voice"
+        private const val KEY_MARKING_SNAP = "lane_marking_snap"
         private const val KEY_HUD = "hud"
         private const val KEY_FCW = "fcw"
         private const val KEY_LDW = "ldw"

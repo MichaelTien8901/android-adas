@@ -32,6 +32,7 @@ class SettingsActivity : AppCompatActivity() {
             ldw.bind(prefs.ldwEnabled) { prefs.ldwEnabled = it }
             headway.bind(prefs.headwayEnabled) { prefs.headwayEnabled = it }
             tsr.bind(prefs.tsrEnabled) { prefs.tsrEnabled = it }
+            markingSnap.bind(prefs.laneMarkingSnap) { prefs.laneMarkingSnap = it }
             replay.bind(prefs.replayMode) { prefs.replayMode = it }
             calibrateButton.setOnClickListener {
                 startActivity(Intent(this@SettingsActivity, CalibrationActivity::class.java))

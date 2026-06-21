@@ -27,6 +27,7 @@ import java.io.Closeable
 class PerceptionEngine(
     context: Context,
     private val calib: Calibration = Calibration.DEFAULT,
+    private val laneMarkingSnap: Boolean = false,
 ) : Closeable {
 
     private val detectorRunner: ModelRunner =
@@ -72,7 +73,8 @@ class PerceptionEngine(
 
             val lanes = laneDetector?.let { ld ->
                 val input = Preprocess.toLaneInput(frame, Config.LANE_INPUT_W, Config.LANE_INPUT_H, Config.LANE_CROP_RATIO)
-                ld.detect(input, frameGray(frame), GRAY_W, GRAY_H)   // hybrid marking-snap
+                // Optional hybrid marking-snap (skip the grayscale cost when off).
+                if (laneMarkingSnap) ld.detect(input, frameGray(frame), GRAY_W, GRAY_H) else ld.detect(input)
             } ?: classicalLanes.detect(frame)
             lanesAvailableLastFrame = lanes != null
 
