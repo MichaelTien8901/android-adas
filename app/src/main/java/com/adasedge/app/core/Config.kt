@@ -26,6 +26,8 @@ object Config {
     const val FCW_TTC_IMMINENT_S = 1.4f
     const val FCW_MIN_SPEED_KMH = 8f
     const val FCW_LATENCY_MARGIN_S = 0.3f      // absorbs GPS speed lag
+    const val FCW_DWELL_S = 0.35f              // TTC must stay below threshold this long before firing (kills single-frame TTC-noise false alarms)
+    const val FCW_CLEAR_HYST_S = 0.4f          // grace period: extra TTC headroom must persist this long to clear (anti-flicker)
 
     // ---- Lane departure (lane-departure-warning, ISO 17361) ----
     const val LDW_ACTIVATION_KMH = 60f

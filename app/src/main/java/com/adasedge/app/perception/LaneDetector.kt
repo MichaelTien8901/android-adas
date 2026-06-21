@@ -26,6 +26,10 @@ class LaneDetector(
     private val minConfidence: Float = 0.35f,
     private val cropRatio: Float = Config.LANE_CROP_RATIO,
     private val horizonRatio: Float = Calibration.DEFAULT.horizonRatio,
+    // UFLDv2 TuSimple row anchors span only [0.42, 1.0] of the model input
+    // (deploy: row_anchor = linspace(0.42, 1, num_row)), NOT the full input height.
+    private val rowAnchorMin: Float = 0.42f,
+    private val rowAnchorMax: Float = 1.0f,
 ) {
     // Top of the lane-input region in full-frame normalized-y (sky crop + UFLDv2's
     // internal bottom-crop). Lane row-anchor y in [0,1] maps to [yTop, 1] of the frame.
@@ -56,8 +60,12 @@ class LaneDetector(
                 val present = exist?.let { it.data[l * numRow + r] > 0.5f } ?: (bestVal > minConfidence)
                 if (!present || bestCol < 0) continue
                 val x = bestCol / (griding - 1f)
-                // Map the row-anchor y from lane-input space back to the full frame.
-                val y = yTop + (r / (numRow - 1f)) * (1f - yTop)
+                // Map the row-anchor back to the full frame. The anchors only cover
+                // [rowAnchorMin, rowAnchorMax] of the model input — placing them at
+                // their true input fraction first (instead of spreading 0..1 across
+                // [yTop,1]) fixes the lane top being drawn far too high (alignment).
+                val anchorFrac = rowAnchorMin + (r / (numRow - 1f)) * (rowAnchorMax - rowAnchorMin)
+                val y = yTop + anchorFrac * (1f - yTop)
                 pts += floatArrayOf(x, y)
                 totalConf += sigmoidish(bestVal); counted++
             }

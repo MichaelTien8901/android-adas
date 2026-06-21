@@ -53,16 +53,23 @@ class AlertController(context: Context, private val prefs: Prefs) {
 
     private var lastLevel = WarningLevel.NONE
     private var lastFireMs = 0L
+    private var stopWasVisible = false   // edge-trigger for the spoken stop-sign cue
 
     /** Drive cues from the current frame's warnings. */
     fun update(warnings: List<Warning>) {
-        // Speed-limit announcement: speak each newly-detected limit ("Speed limit 50")
-        // independent of the urgency gate below — it's INFO-level and must not beep.
-        // TrafficSignWarning emits this exactly once per new value, so just speak it.
+        // INFO-cue announcements: spoken but never beep (they sit below the urgency
+        // gate below, which would otherwise drop them).
+        val stopNow = warnings.any { it.type == WarningType.STOP_SIGN }
         if (prefs.voiceAlerts && ttsReady) {
+            // Speak each newly-detected limit once ("Speed limit 50") — TrafficSignWarning
+            // emits SPEED_LIMIT exactly once per new value.
             warnings.firstOrNull { it.type == WarningType.SPEED_LIMIT }
                 ?.let { tts.speak(it.message, TextToSpeech.QUEUE_ADD, null, "adas-limit") }
+            // Stop sign persists every frame while visible, so announce only on its
+            // rising edge (first appearance) to avoid repeating "Stop sign" each frame.
+            if (stopNow && !stopWasVisible) tts.speak("Stop sign", TextToSpeech.QUEUE_ADD, null, "adas-stop")
         }
+        stopWasVisible = stopNow
 
         val topWarning = warnings.maxByOrNull { it.level.ordinal }
         val top = topWarning?.level ?: WarningLevel.NONE

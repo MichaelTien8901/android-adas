@@ -34,10 +34,20 @@ class WarningLogicTest {
     }
 
     @Test fun fcw_imminent_when_ttc_low_and_speed_ok() {
-        val w = ForwardCollisionWarning().evaluate(resultWithLead(12f, 1.0f, 0L), speed(80f))
+        val fcw = ForwardCollisionWarning()
+        // Sustained low TTC: arm, then fire once the dwell (0.35 s) elapses.
+        assertTrue(fcw.evaluate(resultWithLead(12f, 1.0f, 0L), speed(80f)).isEmpty())
+        val w = fcw.evaluate(resultWithLead(12f, 1.0f, 500_000_000L), speed(80f))
         assertEquals(1, w.size)
         assertEquals(WarningType.FORWARD_COLLISION, w[0].type)
         assertEquals(WarningLevel.IMMINENT, w[0].level)
+    }
+
+    @Test fun fcw_no_false_alarm_on_transient_ttc_dip() {
+        val fcw = ForwardCollisionWarning()
+        // One noisy frame dips below threshold, next frame recovers — must NOT fire.
+        assertTrue(fcw.evaluate(resultWithLead(12f, 1.0f, 0L), speed(80f)).isEmpty())
+        assertTrue(fcw.evaluate(resultWithLead(40f, 6.0f, 100_000_000L), speed(80f)).isEmpty())
     }
 
     @Test fun fcw_suppressed_below_min_speed() {
