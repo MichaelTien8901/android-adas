@@ -12,6 +12,10 @@ import com.adasedge.app.model.ObjectClass
 import com.adasedge.app.model.PerceptionResult
 import com.adasedge.app.inference.EngineFactory
 import com.adasedge.app.inference.ModelRunner
+import org.opencv.android.Utils
+import org.opencv.core.Mat
+import org.opencv.core.Size
+import org.opencv.imgproc.Imgproc
 import java.io.Closeable
 
 /**
@@ -36,6 +40,7 @@ class PerceptionEngine(
         LaneDetector(it, horizonRatio = calib.horizonRatio, roadBottomRatio = calib.roadBottomRatio)
     }
     private val classicalLanes = ClassicalLaneFallback()
+    private val grayBuf = ByteArray(GRAY_W * GRAY_H)   // reused per-frame for the lane marking-snap
 
     // Speed-limit sign recognition (task 7.6): OpenCV circles + GTSRB CNN. Optional —
     // null when gtsrb.onnx is absent (over-speed simply never fires then).
@@ -66,7 +71,8 @@ class PerceptionEngine(
             val detections = if (lastSigns.isEmpty()) detected else detected + lastSigns
 
             val lanes = laneDetector?.let { ld ->
-                ld.detect(Preprocess.toLaneInput(frame, Config.LANE_INPUT_W, Config.LANE_INPUT_H, Config.LANE_CROP_RATIO))
+                val input = Preprocess.toLaneInput(frame, Config.LANE_INPUT_W, Config.LANE_INPUT_H, Config.LANE_CROP_RATIO)
+                ld.detect(input, frameGray(frame), GRAY_W, GRAY_H)   // hybrid marking-snap
             } ?: classicalLanes.detect(frame)
             lanesAvailableLastFrame = lanes != null
 
@@ -91,9 +97,27 @@ class PerceptionEngine(
         return LeadEstimate(lead, dist, ttcSeconds)
     }
 
+    /** Downscaled full-frame grayscale (row-major 0..255) for the lane marking-snap. */
+    private fun frameGray(frame: Bitmap): ByteArray {
+        val rgba = Mat(); val gray = Mat(); val small = Mat()
+        try {
+            Utils.bitmapToMat(frame, rgba)
+            Imgproc.cvtColor(rgba, gray, Imgproc.COLOR_RGBA2GRAY)
+            Imgproc.resize(gray, small, Size(GRAY_W.toDouble(), GRAY_H.toDouble()))
+            small.get(0, 0, grayBuf)
+        } finally {
+            rgba.release(); gray.release(); small.release()
+        }
+        return grayBuf
+    }
+
     override fun close() {
         detectorRunner.close(); laneRunner?.close(); signRunner?.close()
     }
 
-    companion object { private const val TAG = "PerceptionEngine" }
+    companion object {
+        private const val TAG = "PerceptionEngine"
+        private const val GRAY_W = 512   // marking-snap grayscale resolution (preserves thin markings)
+        private const val GRAY_H = 288
+    }
 }

@@ -55,21 +55,31 @@ class LaneDetector(
     private val smoothLeft = FloatArray(numRow) { Float.NaN }
     private val smoothRight = FloatArray(numRow) { Float.NaN }
 
-    fun detect(input: FloatArray): LaneGeometry? {
+    /**
+     * @param gray optional full-frame grayscale (row-major, 0..255, [grayW]x[grayH])
+     *   for the marking-snap refinement (hybrid path): each NN lane point is nudged
+     *   onto the brightest lane-paint pixel in a small horizontal window, which
+     *   tightens onto real markings and bridges dashed gaps. Null = NN-only.
+     */
+    fun detect(input: FloatArray, gray: ByteArray? = null, grayW: Int = 0, grayH: Int = 0): LaneGeometry? {
         val outs = runner.run(input)
         val loc = outs.firstOrNull { it.data.size >= numLanes * numRow * griding } ?: return null
         val exist = outs.firstOrNull { it !== loc && it.data.size >= numLanes * numRow }
 
-        val left = decodeLane(loc, exist, EGO_LEFT_LANE, smoothLeft)
-        val right = decodeLane(loc, exist, EGO_RIGHT_LANE, smoothRight)
+        val left = decodeLane(loc, exist, EGO_LEFT_LANE, smoothLeft, gray, grayW, grayH)
+        val right = decodeLane(loc, exist, EGO_RIGHT_LANE, smoothRight, gray, grayW, grayH)
         if (left.isEmpty() && right.isEmpty()) return null
 
         val conf = existenceConfidence(exist)
         return LaneGeometry(left, right, conf)
     }
 
-    /** Decode one ego lane: soft-argmax per row, existence-gated, temporally smoothed. */
-    private fun decodeLane(loc: TensorOut, exist: TensorOut?, lane: Int, smooth: FloatArray): List<FloatArray> {
+    /** Decode one ego lane: soft-argmax per row, existence-gated, temporally smoothed,
+     *  optionally snapped to the nearest bright marking pixel. */
+    private fun decodeLane(
+        loc: TensorOut, exist: TensorOut?, lane: Int, smooth: FloatArray,
+        gray: ByteArray?, grayW: Int, grayH: Int,
+    ): List<FloatArray> {
         val pts = ArrayList<FloatArray>(numRow)
         for (r in 0 until numRow) {
             val base = (lane * numRow + r) * griding
@@ -99,10 +109,33 @@ class LaneDetector(
             val xs = if (smooth[r].isNaN()) xRaw else smooth[r] + temporalAlpha * (xRaw - smooth[r])
             smooth[r] = xs
 
-            pts += floatArrayOf(xs, y)
+            // Hybrid: snap the NN x onto the nearest bright marking pixel (refines onto
+            // real paint, bridges dashed gaps); the EMA state stays NN-only so the
+            // search stays centred on a stable estimate.
+            val xFinal = if (gray != null) snapToMarking(xs, y, gray, grayW, grayH) else xs
+            pts += floatArrayOf(xFinal, y)
         }
         if (pts.size < MIN_LANE_POINTS) return emptyList()
         return polyfitSmooth(pts)
+    }
+
+    /** Nudge x onto the brightest pixel in a small horizontal window at row y — but
+     *  only if that peak is clearly brighter than the local road (a real marking);
+     *  otherwise keep the NN x. Markings (white/yellow) are bright in grayscale. */
+    private fun snapToMarking(x: Float, y: Float, gray: ByteArray, gw: Int, gh: Int): Float {
+        if (gw <= 0 || gh <= 0) return x
+        val row = (y * gh).toInt().coerceIn(0, gh - 1)
+        val cx = (x * gw).toInt()
+        val half = max(2, (SNAP_WINDOW_NORM * gw).toInt())
+        val lo = max(0, cx - half); val hi = min(gw - 1, cx + half)
+        var bestCol = cx; var bestVal = -1; var sum = 0; var n = 0
+        for (c in lo..hi) {
+            val v = gray[row * gw + c].toInt() and 0xFF
+            sum += v; n++
+            if (v > bestVal) { bestVal = v; bestCol = c }
+        }
+        val avg = if (n > 0) sum / n else 0
+        return if (bestVal - avg >= SNAP_MIN_CONTRAST) bestCol / gw.toFloat() else x
     }
 
     /**
@@ -163,5 +196,7 @@ class LaneDetector(
         const val LOCAL_W = 1           // soft-argmax window radius (demo.py local_width)
         const val EXIST_THRESHOLD = 0.5f
         const val MIN_LANE_POINTS = 6
+        const val SNAP_WINDOW_NORM = 0.025f   // horizontal search half-width (frac of width)
+        const val SNAP_MIN_CONTRAST = 28      // peak must beat the local-window mean by this (0..255)
     }
 }
