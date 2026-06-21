@@ -3,20 +3,31 @@ package com.adasedge.app.perception
 import com.adasedge.app.core.Calibration
 import com.adasedge.app.core.Config
 import com.adasedge.app.inference.ModelRunner
+import com.adasedge.app.inference.TensorOut
 import com.adasedge.app.model.LaneGeometry
-import kotlin.math.abs
+import kotlin.math.exp
+import kotlin.math.max
+import kotlin.math.min
 
 /**
  * Ultra-Fast-Lane-Detection v2 decoder (design D5: NPU lane model in v1).
- * UFLDv2 predicts, per lane and per row-anchor, a distribution over griding
- * columns plus an existence flag. We argmax the column distribution, gate by
- * existence, then select the ego-left and ego-right lanes as those nearest the
- * bottom-center.
  *
- * NOTE: the griding / row-anchor counts MUST match the exported model's training
- * config; defaults below follow the CULane UFLDv2 config and should be adjusted
- * if you retrain. When output shapes don't match, [detect] returns null so the
- * pipeline reports lanes unavailable (adas-perception: "Lanes not detectable").
+ * UFLDv2 predicts, per lane and per row-anchor, a distribution over [griding]
+ * columns plus an existence probability. Decoding follows the authors' own deploy
+ * code (Ultra-Fast-Lane-Detection-v2/demo.py) to keep the output smooth:
+ *
+ *  - **Ego lanes only.** Only slots 1 (ego-left) and 2 (ego-right) are valid on the
+ *    ROW-anchor branch; the outer lanes (0, 3) belong to a separate column branch
+ *    we don't export, so decoding them on the row branch produced scattered noise.
+ *    Slot 1 is the left boundary, slot 2 the right — a stable, semantic assignment
+ *    that needs no centre-split heuristic and is correct even mid-departure.
+ *  - **Soft-argmax.** Each column is a softmax-weighted expectation over a +/-1
+ *    window around the argmax (sub-cell precision) instead of a raw argmax, which
+ *    otherwise snaps to integer columns and stair-steps.
+ *  - **Temporal EMA.** Each row's column is low-passed across frames for stability.
+ *
+ * The griding / row-anchor counts MUST match the exported model; on a shape
+ * mismatch [detect] returns null so the pipeline reports lanes unavailable.
  */
 class LaneDetector(
     private val runner: ModelRunner,
@@ -31,71 +42,84 @@ class LaneDetector(
     // (deploy: row_anchor = linspace(0.42, 1, num_row)), NOT the full input height.
     private val rowAnchorMin: Float = 0.42f,
     private val rowAnchorMax: Float = 1.0f,
+    // Temporal low-pass factor on each row's column (1.0 = no smoothing).
+    private val temporalAlpha: Float = 0.5f,
 ) {
     // Lane-input region in full-frame normalized-y: [yTop, yBottom]. yTop drops the
-    // sky (horizon) + UFLDv2's internal top-crop; yBottom drops the car hood. A lane
-    // row-anchor maps into this band (see [detect]).
+    // sky (horizon) + UFLDv2's internal top-crop; yBottom drops the car hood.
     private val yBottom = roadBottomRatio
     private val yTop = horizonRatio + (1f - cropRatio) * (roadBottomRatio - horizonRatio)
 
-    // Smoothed ego-lane centre; the left/right split point tracks the lane across
-    // frames so a boundary crossing image-centre keeps its side (see [detect]).
-    private var laneCenter = 0.5f
+    // Per-row temporal EMA of each ego lane's column (normalized x); NaN = unset.
+    private val smoothLeft = FloatArray(numRow) { Float.NaN }
+    private val smoothRight = FloatArray(numRow) { Float.NaN }
 
     fun detect(input: FloatArray): LaneGeometry? {
         val outs = runner.run(input)
-        // Expect a location tensor [.. numLanes*numRow*griding ..] and existence.
         val loc = outs.firstOrNull { it.data.size >= numLanes * numRow * griding } ?: return null
         val exist = outs.firstOrNull { it !== loc && it.data.size >= numLanes * numRow }
 
-        val lanes = ArrayList<List<FloatArray>>()
-        var totalConf = 0f; var counted = 0
-        for (l in 0 until numLanes) {
-            val pts = ArrayList<FloatArray>()
-            for (r in 0 until numRow) {
-                val base = (l * numRow + r) * griding
-                if (base + griding > loc.data.size) continue
-                var bestCol = -1; var bestVal = Float.NEGATIVE_INFINITY
-                for (c in 0 until griding) {
-                    val v = loc.data[base + c]
-                    if (v > bestVal) { bestVal = v; bestCol = c }
-                }
-                val present = exist?.let { it.data[l * numRow + r] > 0.5f } ?: (bestVal > minConfidence)
-                if (!present || bestCol < 0) continue
-                val x = bestCol / (griding - 1f)
-                // Map the row-anchor back to the full frame. The anchors only cover
-                // [rowAnchorMin, rowAnchorMax] of the model input — placing them at
-                // their true input fraction first (instead of spreading 0..1 across
-                // [yTop,1]) fixes the lane top being drawn far too high (alignment).
-                val anchorFrac = rowAnchorMin + (r / (numRow - 1f)) * (rowAnchorMax - rowAnchorMin)
-                val y = yTop + anchorFrac * (yBottom - yTop)
-                pts += floatArrayOf(x, y)
-                totalConf += sigmoidish(bestVal); counted++
-            }
-            if (pts.size >= 4) lanes += pts
-        }
-        if (lanes.isEmpty()) { laneCenter = 0.5f; return null }
+        val left = decodeLane(loc, exist, EGO_LEFT_LANE, smoothLeft)
+        val right = decodeLane(loc, exist, EGO_RIGHT_LANE, smoothRight)
+        if (left.isEmpty() && right.isEmpty()) return null
 
-        // Ego lanes: the boundaries just left / right of the lane centre. The split
-        // point is a SMOOTHED lane centre (not a fixed 0.5), so that as the car
-        // departs and a boundary slides across image-centre it stays on its own side
-        // instead of snapping into the other bucket — which otherwise makes the
-        // overlay's far line jump and hides the departure on that side.
-        val withBottomX = lanes.map { it to (it.maxByOrNull { p -> p[1] }?.get(0) ?: 0.5f) }
-        val leftPair = withBottomX.filter { it.second <= laneCenter }.maxByOrNull { it.second }
-        val rightPair = withBottomX.filter { it.second > laneCenter }.minByOrNull { it.second }
-        if (leftPair == null && rightPair == null) { laneCenter = 0.5f; return null }
-
-        // Re-centre the split from the chosen pair (clamped so noise / a full lane
-        // change can't run it away; it re-seeds to 0.5 whenever lanes are lost).
-        if (leftPair != null && rightPair != null) {
-            val mid = (leftPair.second + rightPair.second) / 2f
-            laneCenter = (laneCenter + Config.LANE_CENTER_SMOOTH * (mid - laneCenter)).coerceIn(0.35f, 0.65f)
-        }
-
-        val conf = if (counted > 0) (totalConf / counted).coerceIn(0f, 1f) else 0f
-        return LaneGeometry(leftPair?.first ?: emptyList(), rightPair?.first ?: emptyList(), conf)
+        val conf = existenceConfidence(exist)
+        return LaneGeometry(left, right, conf)
     }
 
-    private fun sigmoidish(v: Float): Float = 1f / (1f + abs(v).let { kotlin.math.exp(-it) })
+    /** Decode one ego lane: soft-argmax per row, existence-gated, temporally smoothed. */
+    private fun decodeLane(loc: TensorOut, exist: TensorOut?, lane: Int, smooth: FloatArray): List<FloatArray> {
+        val pts = ArrayList<FloatArray>(numRow)
+        for (r in 0 until numRow) {
+            val base = (lane * numRow + r) * griding
+            if (base + griding > loc.data.size) { smooth[r] = Float.NaN; continue }
+
+            var bestCol = 0; var bestVal = loc.data[base]
+            for (c in 1 until griding) {
+                val v = loc.data[base + c]
+                if (v > bestVal) { bestVal = v; bestCol = c }
+            }
+            val present = exist?.let { it.data[lane * numRow + r] > EXIST_THRESHOLD } ?: (bestVal > minConfidence)
+            if (!present) { smooth[r] = Float.NaN; continue }
+
+            // Soft-argmax: softmax-weighted column over a +/-LOCAL_W window (sub-cell).
+            val lo = max(0, bestCol - LOCAL_W); val hi = min(griding - 1, bestCol + LOCAL_W)
+            var sumExp = 0f; var sumWeighted = 0f
+            for (c in lo..hi) {
+                val e = exp(loc.data[base + c] - bestVal)
+                sumExp += e; sumWeighted += e * c
+            }
+            val refinedCol = if (sumExp > 0f) sumWeighted / sumExp + 0.5f else bestCol.toFloat()
+            val xRaw = (refinedCol / (griding - 1f)).coerceIn(0f, 1f)
+
+            val xs = if (smooth[r].isNaN()) xRaw else smooth[r] + temporalAlpha * (xRaw - smooth[r])
+            smooth[r] = xs
+
+            val anchorFrac = rowAnchorMin + (r / (numRow - 1f)) * (rowAnchorMax - rowAnchorMin)
+            val y = yTop + anchorFrac * (yBottom - yTop)
+            pts += floatArrayOf(xs, y)
+        }
+        return if (pts.size >= MIN_LANE_POINTS) pts else emptyList()
+    }
+
+    /** Mean existence probability over present ego-lane anchors (0.5 if none/no head). */
+    private fun existenceConfidence(exist: TensorOut?): Float {
+        if (exist == null) return 0.5f
+        var sum = 0f; var n = 0
+        for (lane in intArrayOf(EGO_LEFT_LANE, EGO_RIGHT_LANE)) {
+            for (r in 0 until numRow) {
+                val p = exist.data[lane * numRow + r]
+                if (p > EXIST_THRESHOLD) { sum += p; n++ }
+            }
+        }
+        return if (n > 0) (sum / n).coerceIn(0f, 1f) else 0.5f
+    }
+
+    private companion object {
+        const val EGO_LEFT_LANE = 1     // UFLDv2 row-anchor ego lanes are slots [1, 2]
+        const val EGO_RIGHT_LANE = 2
+        const val LOCAL_W = 1           // soft-argmax window radius (demo.py local_width)
+        const val EXIST_THRESHOLD = 0.5f
+        const val MIN_LANE_POINTS = 6
+    }
 }

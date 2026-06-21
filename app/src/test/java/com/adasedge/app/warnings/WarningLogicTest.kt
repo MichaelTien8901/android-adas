@@ -103,15 +103,14 @@ class WarningLogicTest {
         override fun close() {}
     }
 
-    /** Regression: as the car departs RIGHT the right boundary slides across image
-     *  centre (0.5). The old fixed-0.5 split dropped it into the left bucket, so the
-     *  reported right lane snapped to a far lane (overlay distortion) and the right
-     *  departure went undetected. The smoothed-centre split must keep tracking it. */
+    /** UFLDv2 ego slot 2 is the right boundary regardless of where it sits, so a
+     *  right boundary sliding across image centre (0.5) is still reported as `right`
+     *  (no fixed-0.5 bucket to snap). temporalAlpha=1 disables EMA lag for the assert. */
     @Test fun right_boundary_tracks_across_center_on_right_departure() {
         val runner = FakeRunner()
-        val det = LaneDetector(runner)
+        val det = LaneDetector(runner, temporalAlpha = 1f)
         var rightBottomX = Float.NaN
-        // left fixed ~0.30; right sweeps from 0.65 down across 0.5 to 0.46.
+        // left = ego slot 1 (~0.30); right = ego slot 2 sweeping across 0.5 to 0.46.
         for (rx in listOf(0.65f, 0.60f, 0.55f, 0.52f, 0.49f, 0.46f)) {
             runner.outputs = laneOutputs(mapOf(1 to 0.30f, 2 to rx))
             val g = det.detect(FloatArray(1))!!
@@ -121,10 +120,10 @@ class WarningLogicTest {
         assertEquals("right boundary should track to ~0.46, not snap away", 0.46f, rightBottomX, 0.03f)
     }
 
-    /** End-to-end: the tracked geometry makes LDW fire on the RIGHT side. */
+    /** End-to-end: the ego-slot geometry makes LDW fire on the RIGHT side. */
     @Test fun ldw_fires_right_on_right_departure() {
         val runner = FakeRunner()
-        val det = LaneDetector(runner)
+        val det = LaneDetector(runner, temporalAlpha = 1f)
         val ldw = LaneDepartureWarning()
         var warns = emptyList<com.adasedge.app.model.Warning>()
         for (rx in listOf(0.65f, 0.58f, 0.52f, 0.49f)) {   // right boundary closing on ego
