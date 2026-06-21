@@ -42,6 +42,7 @@ object Config {
     const val OVERSPEED_TOLERANCE_KMH = 5f
     const val SIGN_STALE_AFTER_M = 3000f       // expire a limit after this distance
     const val SIGN_CONF_THRESHOLD = 0.5f
+    const val SIGN_CONFIRM_HITS = 4            // frames a NEW limit must persist before it replaces the active one (debounce)
 
     // ---- Speed context (speed-context, research/05) ----
     const val SPEED_SMOOTHING_ALPHA = 0.35f    // low-pass factor on raw GPS speed

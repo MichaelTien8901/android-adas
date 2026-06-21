@@ -19,17 +19,33 @@ import com.adasedge.app.model.WarningType
 class TrafficSignWarning : WarningEvaluator {
 
     private var currentLimitKmh: Int? = null
+    private var pendingLimitKmh: Int? = null
+    private var pendingHits = 0
     private var distanceSinceConfirmM = 0f
     private var lastTsNanos = 0L
 
     override fun evaluate(result: PerceptionResult, speed: SpeedSample): List<Warning> {
         integrateDistanceAndExpire(result, speed)
 
-        // Update the limit from any speed-limit sign carrying a recognized value.
+        // Update the limit from any speed-limit sign carrying a recognized value,
+        // but DEBOUNCE: a transient single-cycle misread (a sign briefly classified
+        // wrong as the bounding box wobbles) must not flip the active limit. Require
+        // a *different* value to be confirmed over SIGN_CONFIRM_HITS frames before it
+        // replaces the current one; a reading matching the current limit just refreshes it.
         result.detections
             .firstOrNull { it.cls == ObjectClass.SPEED_LIMIT_SIGN && it.score >= Config.SIGN_CONF_THRESHOLD }
             ?.attribute?.toIntOrNull()
-            ?.let { currentLimitKmh = it; distanceSinceConfirmM = 0f }
+            ?.let { read ->
+                when {
+                    read == currentLimitKmh -> { pendingLimitKmh = null; pendingHits = 0; distanceSinceConfirmM = 0f }
+                    read == pendingLimitKmh -> {
+                        if (++pendingHits >= Config.SIGN_CONFIRM_HITS) {
+                            currentLimitKmh = read; pendingLimitKmh = null; pendingHits = 0; distanceSinceConfirmM = 0f
+                        }
+                    }
+                    else -> { pendingLimitKmh = read; pendingHits = 1 }
+                }
+            }
 
         val out = ArrayList<Warning>()
 
