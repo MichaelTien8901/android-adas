@@ -78,10 +78,12 @@ class PerceptionEngine(
         }
     }
 
-    /** Lead = nearest in-path vehicle: center-band, lowest in frame (closest). */
+    /** Lead = nearest in-path vehicle: center-band (around the calibrated straight-ahead
+     *  column for an off-centre camera), lowest in frame (closest). */
     private fun selectLead(dets: List<Detection>, w: Int, h: Int, tsNanos: Long): LeadEstimate? {
+        val lo = calib.centerRatio - 0.20f; val hi = calib.centerRatio + 0.20f
         val candidates = dets.filter {
-            it.cls.isVehicle && it.box.centerX() in 0.30f..0.70f
+            it.cls.isVehicle && it.box.centerX() in lo..hi
         }
         val lead = candidates.maxByOrNull { it.box.bottom } ?: run { ttc.reset(); return null }
         val dist = distance.estimate(lead, w, h) ?: return null

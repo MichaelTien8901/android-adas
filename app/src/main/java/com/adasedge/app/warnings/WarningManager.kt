@@ -14,7 +14,7 @@ import com.adasedge.app.model.Warning
 class WarningManager(private val prefs: Prefs) {
 
     val fcw = ForwardCollisionWarning()
-    val ldw = LaneDepartureWarning()
+    val ldw = LaneDepartureWarning(egoCenter = prefs.centerRatio)
     val headway = HeadwayMonitor()
     val tsr = TrafficSignWarning()
 

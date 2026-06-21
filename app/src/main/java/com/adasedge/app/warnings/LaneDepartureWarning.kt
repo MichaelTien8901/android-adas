@@ -18,7 +18,10 @@ import kotlin.math.abs
  * Intent suppression is best-effort: a phone app cannot read the turn signal, so
  * [intentToDepart] can be set by any future intent cue; when unknown it is false.
  */
-class LaneDepartureWarning : WarningEvaluator {
+class LaneDepartureWarning(
+    /** Straight-ahead column (0..1) for an off-centre / angled camera; 0.5 = centred. */
+    private val egoCenter: Float = 0.5f,
+) : WarningEvaluator {
 
     @Volatile var intentToDepart: Side = Side.NONE   // hook for future intent cues
     private var active = false                         // hysteresis state on activation speed
@@ -36,7 +39,7 @@ class LaneDepartureWarning : WarningEvaluator {
         if (!active) return emptyList()
 
         val lanes = result.lanes ?: return emptyList()      // lane-availability gate
-        val ego = 0.5f
+        val ego = egoCenter
 
         // The boundaries are now ego-lane-stable (LaneDetector tracks them across the
         // image centre), so the nearest one is the line being crossed and its side is

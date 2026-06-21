@@ -16,6 +16,9 @@ data class Calibration(
     /** Normalized image row (0..1) where the road ends / the car hood begins; the
      *  lane band is [horizonRatio, roadBottomRatio]. 1.0 = no hood (road to bottom). */
     val roadBottomRatio: Float = 1.0f,
+    /** Normalized image column (0..1) of "straight ahead" for an off-centre / angled
+     *  camera; the ego reference for lane-departure + the lead in-path band. 0.5 = centred. */
+    val centerRatio: Float = 0.5f,
     /** Assumed physical width of a typical car, meters (known-width method). */
     val typicalVehicleWidthM: Float = 1.8f,
 ) {

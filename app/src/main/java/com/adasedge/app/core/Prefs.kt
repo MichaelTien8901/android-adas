@@ -69,6 +69,12 @@ class Prefs(context: Context) {
         get() = sp.getFloat(KEY_ROAD_BOTTOM, Calibration.DEFAULT.roadBottomRatio)
         set(v) = sp.edit { putFloat(KEY_ROAD_BOTTOM, v.coerceIn(0.5f, 1f)) }
 
+    /** Calibrated straight-ahead column (0..1) for an off-centre / angled camera; the
+        ego reference for lane-departure and the lead in-path band. 0.5 = centred. */
+    var centerRatio: Float
+        get() = sp.getFloat(KEY_CENTER, Calibration.DEFAULT.centerRatio)
+        set(v) = sp.edit { putFloat(KEY_CENTER, v.coerceIn(0.2f, 0.8f)) }
+
     companion object {
         private const val KEY_DISCLAIMER = "disclaimer_accepted"
         private const val KEY_AUDIBLE = "audible"
@@ -83,5 +89,6 @@ class Prefs(context: Context) {
         private const val KEY_REPLAY_SPEED = "replay_speed_kmh"
         private const val KEY_HORIZON = "horizon_ratio"
         private const val KEY_ROAD_BOTTOM = "road_bottom_ratio"
+        private const val KEY_CENTER = "center_ratio"
     }
 }

@@ -24,8 +24,10 @@ class HorizonView @JvmOverloads constructor(
         set(v) { field = v.coerceIn(0.05f, 0.9f); invalidate() }
     var hoodY: Float = 1.0f
         set(v) { field = v.coerceIn(0.1f, 1.0f); invalidate() }
+    var centerX: Float = 0.5f
+        set(v) { field = v.coerceIn(0.2f, 0.8f); invalidate() }
 
-    private var dragging = 0   // 0 = none, 1 = horizon, 2 = hood
+    private var dragging = 0   // 0 = none, 1 = horizon, 2 = hood, 3 = center
 
     private val line = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         color = AMBER; strokeWidth = 6f; style = Paint.Style.STROKE
@@ -48,23 +50,34 @@ class HorizonView @JvmOverloads constructor(
         canvas.drawLine(0f, dy, width.toFloat(), dy, line)
         canvas.drawCircle(width / 2f, dy, 18f, handle)
         canvas.drawText("Drag to the hood / road bottom", 32f, dy - 20f, label)
+        // Vertical line: "straight ahead" (camera centre).
+        val cx = centerX * width
+        canvas.drawLine(cx, hy, cx, dy, line)
+        canvas.drawCircle(cx, (hy + dy) / 2f, 18f, handle)
+        canvas.drawText("Centre", cx + 24f, (hy + dy) / 2f - 24f, label)
     }
 
     override fun onTouchEvent(e: MotionEvent): Boolean {
         return when (e.actionMasked) {
             MotionEvent.ACTION_DOWN -> {
-                val t = e.y / height
-                dragging = if (abs(t - normalizedY) <= abs(t - hoodY)) 1 else 2
-                apply(t); performClick(); true
+                // Pick the nearest of the three handles (two horizontal, one vertical).
+                val ty = e.y / height; val tx = e.x / width
+                val dH = abs(ty - normalizedY); val dB = abs(ty - hoodY); val dC = abs(tx - centerX)
+                dragging = if (dC <= dH && dC <= dB) 3 else if (dH <= dB) 1 else 2
+                apply(e); performClick(); true
             }
-            MotionEvent.ACTION_MOVE -> { if (dragging != 0) apply(e.y / height); true }
+            MotionEvent.ACTION_MOVE -> { if (dragging != 0) apply(e); true }
             MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> { dragging = 0; true }
             else -> super.onTouchEvent(e)
         }
     }
 
-    private fun apply(t: Float) {
-        when (dragging) { 1 -> normalizedY = t; 2 -> hoodY = t }
+    private fun apply(e: MotionEvent) {
+        when (dragging) {
+            1 -> normalizedY = e.y / height
+            2 -> hoodY = e.y / height
+            3 -> centerX = e.x / width
+        }
     }
 
     override fun performClick(): Boolean { super.performClick(); return true }

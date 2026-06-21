@@ -49,6 +49,7 @@ class OverlayView @JvmOverloads constructor(
     private val lanePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         color = CYAN; style = Paint.Style.STROKE; strokeWidth = 10f; strokeCap = Paint.Cap.ROUND
     }
+    private val driveFill = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.FILL }
     private val bannerPaint = Paint(Paint.ANTI_ALIAS_FLAG)
     private val bannerText = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         color = Color.WHITE; textSize = 52f; isFakeBoldText = true
@@ -88,7 +89,11 @@ class OverlayView @JvmOverloads constructor(
     // ---------------- detailed mode ----------------
     private fun drawDetailed(canvas: Canvas) {
         result?.let { r ->
-            r.lanes?.let { drawLane(canvas, it.left); drawLane(canvas, it.right) }
+            r.lanes?.let { lanes ->
+                val departing = warnings.any { it.type == WarningType.LANE_DEPARTURE }
+                drawDrivableArea(canvas, lanes.left, lanes.right, departing)   // free space, under the lines
+                drawLane(canvas, lanes.left); drawLane(canvas, lanes.right)
+            }
             for (d in r.detections) {
                 val col = if (d.cls.isVulnerable) RED else GREEN
                 boxPaint.color = col
@@ -122,6 +127,23 @@ class OverlayView @JvmOverloads constructor(
         path.moveTo(pts[0][0] * width, pts[0][1] * height)
         for (i in 1 until pts.size) path.lineTo(pts[i][0] * width, pts[i][1] * height)
         canvas.drawPath(path, lanePaint)
+    }
+
+    /**
+     * The drivable area (free space / ego-lane corridor): a translucent polygon
+     * filling between the two ego-lane boundaries — down the left, up the right.
+     * Needs both boundaries; with one missing we fall through to lines-only. Tinted
+     * green normally, amber while a lane departure is active.
+     */
+    private fun drawDrivableArea(canvas: Canvas, left: List<FloatArray>, right: List<FloatArray>, departing: Boolean) {
+        if (left.size < 2 || right.size < 2) return
+        val path = Path()
+        path.moveTo(left[0][0] * width, left[0][1] * height)
+        for (i in 1 until left.size) path.lineTo(left[i][0] * width, left[i][1] * height)
+        for (i in right.indices.reversed()) path.lineTo(right[i][0] * width, right[i][1] * height)
+        path.close()
+        driveFill.color = if (departing) DRIVE_AMBER else DRIVE_GREEN
+        canvas.drawPath(path, driveFill)
     }
 
     private fun drawBanner(canvas: Canvas) {
@@ -248,5 +270,7 @@ class OverlayView @JvmOverloads constructor(
         private val AMBER = Color.parseColor("#FFB300")
         private val RED_BANNER = Color.parseColor("#D32F2F")
         private val AMBER_BANNER = Color.parseColor("#FFB300")
+        private val DRIVE_GREEN = Color.parseColor("#3300E676")   // translucent free-space fill
+        private val DRIVE_AMBER = Color.parseColor("#44FFB300")   // translucent fill while departing
     }
 }

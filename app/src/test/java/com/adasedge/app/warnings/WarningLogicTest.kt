@@ -120,6 +120,24 @@ class WarningLogicTest {
         assertEquals("right boundary should track to ~0.46, not snap away", 0.46f, rightBottomX, 0.03f)
     }
 
+    private fun lanesAt(leftX: Float, rightX: Float) = com.adasedge.app.model.LaneGeometry(
+        listOf(floatArrayOf(leftX, 0.98f), floatArrayOf(leftX, 0.80f)),
+        listOf(floatArrayOf(rightX, 0.98f), floatArrayOf(rightX, 0.80f)),
+        0.9f,
+    )
+
+    /** The calibrated straight-ahead column (centerRatio) is the departure reference:
+     *  the SAME geometry that's centred at ego=0.5 becomes a departure once the camera
+     *  centre is calibrated off to one side. */
+    @Test fun ldw_uses_calibrated_center_for_departure() {
+        val result = PerceptionResult(0L, emptyList(), lanesAt(0.42f, 0.82f), null, 1280, 720)
+        // Centred reference (0.5): nearest boundary 0.08 away (> 0.04) -> no departure.
+        assertTrue(LaneDepartureWarning(egoCenter = 0.5f).evaluate(result, speed(80f)).isEmpty())
+        // Camera straight-ahead calibrated to 0.44: now 0.02 from the left line -> LEFT.
+        val w = LaneDepartureWarning(egoCenter = 0.44f).evaluate(result, speed(80f))
+        assertEquals(Side.LEFT, w.single().side)
+    }
+
     /** End-to-end: the ego-slot geometry makes LDW fire on the RIGHT side. */
     @Test fun ldw_fires_right_on_right_departure() {
         val runner = FakeRunner()
