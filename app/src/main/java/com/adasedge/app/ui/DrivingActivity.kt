@@ -97,6 +97,10 @@ class DrivingActivity : AppCompatActivity() {
     }
 
     private fun stopDriving() {
+        // Tell the service to tear itself down (stopForeground + stopSelf) BEFORE we
+        // unbind — a bound + started foreground service won't die on stopService()
+        // alone, which left it running in the background.
+        service?.requestStop()
         runCatching { unbindService(connection) }
         stopService(Intent(this, DrivingService::class.java))
         service = null

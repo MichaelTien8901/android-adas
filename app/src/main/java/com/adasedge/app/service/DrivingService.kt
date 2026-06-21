@@ -95,8 +95,23 @@ class DrivingService : LifecycleService() {
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         super.onStartCommand(intent, flags, startId)
+        if (intent?.action == ACTION_STOP) { requestStop(); return START_NOT_STICKY }
         startForegroundCompat()
-        return START_STICKY
+        // NOT_STICKY: a user-stopped ADAS session must never be silently resurrected
+        // by the system in the background (START_STICKY would recreate it).
+        return START_NOT_STICKY
+    }
+
+    /** Fully tear down the foreground session (camera/replay, notification, process). */
+    fun requestStop() {
+        stopForeground(Service.STOP_FOREGROUND_REMOVE)
+        stopSelf()
+    }
+
+    /** Swiping the app from recents must also kill the session, not leave it running. */
+    override fun onTaskRemoved(rootIntent: Intent?) {
+        requestStop()
+        super.onTaskRemoved(rootIntent)
     }
 
     /** Called by the activity once its PreviewView surface is ready. */
@@ -225,6 +240,7 @@ class DrivingService : LifecycleService() {
     }
 
     companion object {
+        const val ACTION_STOP = "com.adasedge.app.STOP"
         private const val TAG = "DrivingService"
         private const val CHANNEL = "driving_session"
         private const val NOTIF_ID = 1001
