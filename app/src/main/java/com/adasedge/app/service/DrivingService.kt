@@ -104,7 +104,7 @@ class DrivingService : LifecycleService() {
         if (started) return
         started = true
         perception = try {
-            PerceptionEngine(this, Calibration(horizonRatio = prefs.horizonRatio))
+            PerceptionEngine(this, Calibration(horizonRatio = prefs.horizonRatio, roadBottomRatio = prefs.roadBottomRatio))
         } catch (t: Throwable) {
             Log.e(TAG, "perception init failed", t)
             _error.value = "Model assets missing — see tools/README. Showing camera only."

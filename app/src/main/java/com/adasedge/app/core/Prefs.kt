@@ -63,6 +63,12 @@ class Prefs(context: Context) {
         get() = sp.getFloat(KEY_HORIZON, Calibration.DEFAULT.horizonRatio)
         set(v) = sp.edit { putFloat(KEY_HORIZON, v.coerceIn(0.05f, 0.95f)) }
 
+    /** Calibrated road-bottom / hood-top row (0..1); the lane band ends here so lanes
+        aren't drawn onto the car hood. 1.0 = no hood crop. */
+    var roadBottomRatio: Float
+        get() = sp.getFloat(KEY_ROAD_BOTTOM, Calibration.DEFAULT.roadBottomRatio)
+        set(v) = sp.edit { putFloat(KEY_ROAD_BOTTOM, v.coerceIn(0.5f, 1f)) }
+
     companion object {
         private const val KEY_DISCLAIMER = "disclaimer_accepted"
         private const val KEY_AUDIBLE = "audible"
@@ -76,5 +82,6 @@ class Prefs(context: Context) {
         private const val KEY_REPLAY = "replay_mode"
         private const val KEY_REPLAY_SPEED = "replay_speed_kmh"
         private const val KEY_HORIZON = "horizon_ratio"
+        private const val KEY_ROAD_BOTTOM = "road_bottom_ratio"
     }
 }

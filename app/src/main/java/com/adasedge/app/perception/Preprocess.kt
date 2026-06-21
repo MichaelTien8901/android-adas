@@ -62,15 +62,17 @@ object Preprocess {
      * the bottom [dstH] rows. Returns an NCHW [0,1] RGB input. Lane-y is remapped to
      * full-frame space in LaneDetector using the same [horizonRatio]/[cropRatio].
      */
-    fun toLaneInput(src: Bitmap, dstW: Int, dstH: Int, horizonRatio: Float, cropRatio: Float): FloatArray {
+    fun toLaneInput(src: Bitmap, dstW: Int, dstH: Int, horizonRatio: Float, roadBottomRatio: Float, cropRatio: Float): FloatArray {
         val fullH = Math.round(dstH / cropRatio)
         val cropTop = fullH - dstH
         val srcTop = (src.height * horizonRatio).toInt().coerceIn(0, src.height - 2)
-        val srcBandH = src.height - srcTop
+        // Crop the bottom (car hood) too: the road band is [srcTop, srcBottom].
+        val srcBottom = (src.height * roadBottomRatio).toInt().coerceIn(srcTop + 2, src.height)
+        val srcBandH = srcBottom - srcTop
         val sy = fullH.toFloat() / srcBandH
         val scaled = Bitmap.createBitmap(dstW, fullH, Bitmap.Config.ARGB_8888)
         val canvas = Canvas(scaled)
-        // Map source rows [srcTop, srcH] -> dst rows [0, fullH] (sky dropped).
+        // Map source rows [srcTop, srcBottom] -> dst rows [0, fullH] (sky + hood dropped).
         val m = Matrix().apply {
             setScale(dstW.toFloat() / src.width, sy)
             postTranslate(0f, -srcTop * sy)

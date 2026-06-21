@@ -26,14 +26,17 @@ class LaneDetector(
     private val minConfidence: Float = 0.35f,
     private val cropRatio: Float = Config.LANE_CROP_RATIO,
     private val horizonRatio: Float = Calibration.DEFAULT.horizonRatio,
+    private val roadBottomRatio: Float = Calibration.DEFAULT.roadBottomRatio,
     // UFLDv2 TuSimple row anchors span only [0.42, 1.0] of the model input
     // (deploy: row_anchor = linspace(0.42, 1, num_row)), NOT the full input height.
     private val rowAnchorMin: Float = 0.42f,
     private val rowAnchorMax: Float = 1.0f,
 ) {
-    // Top of the lane-input region in full-frame normalized-y (sky crop + UFLDv2's
-    // internal bottom-crop). Lane row-anchor y in [0,1] maps to [yTop, 1] of the frame.
-    private val yTop = horizonRatio + (1f - cropRatio) * (1f - horizonRatio)
+    // Lane-input region in full-frame normalized-y: [yTop, yBottom]. yTop drops the
+    // sky (horizon) + UFLDv2's internal top-crop; yBottom drops the car hood. A lane
+    // row-anchor maps into this band (see [detect]).
+    private val yBottom = roadBottomRatio
+    private val yTop = horizonRatio + (1f - cropRatio) * (roadBottomRatio - horizonRatio)
 
     // Smoothed ego-lane centre; the left/right split point tracks the lane across
     // frames so a boundary crossing image-centre keeps its side (see [detect]).
@@ -65,7 +68,7 @@ class LaneDetector(
                 // their true input fraction first (instead of spreading 0..1 across
                 // [yTop,1]) fixes the lane top being drawn far too high (alignment).
                 val anchorFrac = rowAnchorMin + (r / (numRow - 1f)) * (rowAnchorMax - rowAnchorMin)
-                val y = yTop + anchorFrac * (1f - yTop)
+                val y = yTop + anchorFrac * (yBottom - yTop)
                 pts += floatArrayOf(x, y)
                 totalConf += sigmoidish(bestVal); counted++
             }

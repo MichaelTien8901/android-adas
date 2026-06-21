@@ -13,6 +13,9 @@ data class Calibration(
     val mountHeightM: Float = 1.2f,
     /** Normalized image row (0..1) of the horizon line. */
     val horizonRatio: Float = 0.45f,
+    /** Normalized image row (0..1) where the road ends / the car hood begins; the
+     *  lane band is [horizonRatio, roadBottomRatio]. 1.0 = no hood (road to bottom). */
+    val roadBottomRatio: Float = 1.0f,
     /** Assumed physical width of a typical car, meters (known-width method). */
     val typicalVehicleWidthM: Float = 1.8f,
 ) {

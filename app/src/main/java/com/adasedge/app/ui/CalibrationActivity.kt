@@ -27,8 +27,10 @@ class CalibrationActivity : AppCompatActivity() {
         setContentView(binding.root)
 
         binding.horizon.normalizedY = prefs.horizonRatio
+        binding.horizon.hoodY = prefs.roadBottomRatio
         binding.saveButton.setOnClickListener {
             prefs.horizonRatio = binding.horizon.normalizedY
+            prefs.roadBottomRatio = binding.horizon.hoodY
             Toast.makeText(this, getString(R.string.calib_saved, (binding.horizon.normalizedY * 100).toInt()),
                 Toast.LENGTH_SHORT).show()
             finish()
