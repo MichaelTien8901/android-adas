@@ -31,6 +31,7 @@ object Config {
     const val LDW_ACTIVATION_KMH = 60f
     const val LDW_HYSTERESIS_KMH = 5f          // enable@+, disable@-
     const val LDW_DEPARTURE_DIST_NORM = 0.04f  // normalized distance-to-line
+    const val LANE_CENTER_SMOOTH = 0.25f       // EMA on the ego-lane center: the L/R split point tracks the lane so a boundary crossing image-center doesn't snap buckets
 
     // ---- Headway / tailgating (headway-monitoring, two-second rule) ----
     const val HEADWAY_SAFE_S = 2.0f

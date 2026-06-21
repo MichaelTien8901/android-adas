@@ -31,6 +31,10 @@ class LaneDetector(
     // internal bottom-crop). Lane row-anchor y in [0,1] maps to [yTop, 1] of the frame.
     private val yTop = horizonRatio + (1f - cropRatio) * (1f - horizonRatio)
 
+    // Smoothed ego-lane centre; the left/right split point tracks the lane across
+    // frames so a boundary crossing image-centre keeps its side (see [detect]).
+    private var laneCenter = 0.5f
+
     fun detect(input: FloatArray): LaneGeometry? {
         val outs = runner.run(input)
         // Expect a location tensor [.. numLanes*numRow*griding ..] and existence.
@@ -59,17 +63,27 @@ class LaneDetector(
             }
             if (pts.size >= 4) lanes += pts
         }
-        if (lanes.isEmpty()) return null
+        if (lanes.isEmpty()) { laneCenter = 0.5f; return null }
 
-        // Ego lanes: the lane whose bottom point is just left of center, and the
-        // one just right of center.
+        // Ego lanes: the boundaries just left / right of the lane centre. The split
+        // point is a SMOOTHED lane centre (not a fixed 0.5), so that as the car
+        // departs and a boundary slides across image-centre it stays on its own side
+        // instead of snapping into the other bucket — which otherwise makes the
+        // overlay's far line jump and hides the departure on that side.
         val withBottomX = lanes.map { it to (it.maxByOrNull { p -> p[1] }?.get(0) ?: 0.5f) }
-        val left = withBottomX.filter { it.second <= 0.5f }.maxByOrNull { it.second }?.first
-        val right = withBottomX.filter { it.second > 0.5f }.minByOrNull { it.second }?.first
-        if (left == null && right == null) return null
+        val leftPair = withBottomX.filter { it.second <= laneCenter }.maxByOrNull { it.second }
+        val rightPair = withBottomX.filter { it.second > laneCenter }.minByOrNull { it.second }
+        if (leftPair == null && rightPair == null) { laneCenter = 0.5f; return null }
+
+        // Re-centre the split from the chosen pair (clamped so noise / a full lane
+        // change can't run it away; it re-seeds to 0.5 whenever lanes are lost).
+        if (leftPair != null && rightPair != null) {
+            val mid = (leftPair.second + rightPair.second) / 2f
+            laneCenter = (laneCenter + Config.LANE_CENTER_SMOOTH * (mid - laneCenter)).coerceIn(0.35f, 0.65f)
+        }
 
         val conf = if (counted > 0) (totalConf / counted).coerceIn(0f, 1f) else 0f
-        return LaneGeometry(left ?: emptyList(), right ?: emptyList(), conf)
+        return LaneGeometry(leftPair?.first ?: emptyList(), rightPair?.first ?: emptyList(), conf)
     }
 
     private fun sigmoidish(v: Float): Float = 1f / (1f + abs(v).let { kotlin.math.exp(-it) })

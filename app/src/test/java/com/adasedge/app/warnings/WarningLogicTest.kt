@@ -1,14 +1,19 @@
 package com.adasedge.app.warnings
 
 import android.graphics.RectF
+import com.adasedge.app.inference.ModelRunner
+import com.adasedge.app.inference.TensorOut
+import com.adasedge.app.model.AccelPath
 import com.adasedge.app.model.Detection
 import com.adasedge.app.model.LeadEstimate
 import com.adasedge.app.model.ObjectClass
 import com.adasedge.app.model.PerceptionResult
+import com.adasedge.app.model.Side
 import com.adasedge.app.model.SpeedSample
 import com.adasedge.app.model.SpeedValidity
 import com.adasedge.app.model.WarningLevel
 import com.adasedge.app.model.WarningType
+import com.adasedge.app.perception.LaneDetector
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -58,5 +63,66 @@ class WarningLogicTest {
     @Test fun headway_suppressed_at_low_speed() {
         val w = HeadwayMonitor().evaluate(resultWithLead(10f, Float.POSITIVE_INFINITY, 0L), speed(10f))
         assertTrue(w.isEmpty())
+    }
+
+    // ---- LDW lane-boundary tracking (right-departure regression) ----
+
+    private val numLanes = 4; private val numRow = 56; private val griding = 100
+
+    /** Fake UFLDv2 outputs: each entry maps a lane index to a vertical line at x. */
+    private fun laneOutputs(lanesX: Map<Int, Float>): List<TensorOut> {
+        val loc = FloatArray(numLanes * numRow * griding)
+        val exist = FloatArray(numLanes * numRow)
+        for ((l, x) in lanesX) {
+            val col = Math.round(x * (griding - 1)).coerceIn(0, griding - 1)
+            for (r in 0 until numRow) {
+                loc[(l * numRow + r) * griding + col] = 1f
+                exist[l * numRow + r] = 1f
+            }
+        }
+        return listOf(
+            TensorOut("loc", loc, intArrayOf(1, numLanes, numRow, griding)),
+            TensorOut("exist", exist, intArrayOf(1, numLanes, numRow)),
+        )
+    }
+
+    private class FakeRunner : ModelRunner {
+        var outputs: List<TensorOut> = emptyList()
+        override val accelPath = AccelPath.CPU
+        override fun run(input: FloatArray) = outputs
+        override fun close() {}
+    }
+
+    /** Regression: as the car departs RIGHT the right boundary slides across image
+     *  centre (0.5). The old fixed-0.5 split dropped it into the left bucket, so the
+     *  reported right lane snapped to a far lane (overlay distortion) and the right
+     *  departure went undetected. The smoothed-centre split must keep tracking it. */
+    @Test fun right_boundary_tracks_across_center_on_right_departure() {
+        val runner = FakeRunner()
+        val det = LaneDetector(runner)
+        var rightBottomX = Float.NaN
+        // left fixed ~0.30; right sweeps from 0.65 down across 0.5 to 0.46.
+        for (rx in listOf(0.65f, 0.60f, 0.55f, 0.52f, 0.49f, 0.46f)) {
+            runner.outputs = laneOutputs(mapOf(1 to 0.30f, 2 to rx))
+            val g = det.detect(FloatArray(1))!!
+            rightBottomX = g.right.maxByOrNull { it[1] }?.get(0) ?: Float.NaN
+        }
+        assertTrue("right boundary lost when it crossed image centre", !rightBottomX.isNaN())
+        assertEquals("right boundary should track to ~0.46, not snap away", 0.46f, rightBottomX, 0.03f)
+    }
+
+    /** End-to-end: the tracked geometry makes LDW fire on the RIGHT side. */
+    @Test fun ldw_fires_right_on_right_departure() {
+        val runner = FakeRunner()
+        val det = LaneDetector(runner)
+        val ldw = LaneDepartureWarning()
+        var warns = emptyList<com.adasedge.app.model.Warning>()
+        for (rx in listOf(0.65f, 0.58f, 0.52f, 0.49f)) {   // right boundary closing on ego
+            runner.outputs = laneOutputs(mapOf(1 to 0.30f, 2 to rx))
+            val lanes = det.detect(FloatArray(1))
+            warns = ldw.evaluate(PerceptionResult(0L, emptyList(), lanes, null, 1280, 720), speed(80f))
+        }
+        assertEquals(WarningType.LANE_DEPARTURE, warns.single().type)
+        assertEquals("a right departure must report Side.RIGHT", Side.RIGHT, warns.single().side)
     }
 }

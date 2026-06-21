@@ -38,6 +38,9 @@ class LaneDepartureWarning : WarningEvaluator {
         val lanes = result.lanes ?: return emptyList()      // lane-availability gate
         val ego = 0.5f
 
+        // The boundaries are now ego-lane-stable (LaneDetector tracks them across the
+        // image centre), so the nearest one is the line being crossed and its side is
+        // correct even mid-departure.
         val leftX = lanes.left.minByOrNull { abs(it[1] - 1f) }?.get(0)
         val rightX = lanes.right.minByOrNull { abs(it[1] - 1f) }?.get(0)
 
