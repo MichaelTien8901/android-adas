@@ -92,8 +92,9 @@ class LaneDetector(
             }
             // Row anchor's full-frame y; keep only points inside the road draw band.
             val y = rowAnchorMin + (r / (numRow - 1f)) * (rowAnchorMax - rowAnchorMin)
+            val exr = exist?.data?.get(lane * numRow + r) ?: 1f
             val present = (y in horizonRatio..roadBottomRatio) &&
-                (exist?.let { it.data[lane * numRow + r] > EXIST_THRESHOLD } ?: (bestVal > minConfidence))
+                (if (exist != null) exr > EXIST_THRESHOLD else bestVal > minConfidence)
             if (!present) { smooth[r] = Float.NaN; continue }
 
             // Soft-argmax: softmax-weighted column over a +/-LOCAL_W window (sub-cell).
@@ -113,7 +114,7 @@ class LaneDetector(
             // real paint, bridges dashed gaps); the EMA state stays NN-only so the
             // search stays centred on a stable estimate.
             val xFinal = if (gray != null) snapToMarking(xs, y, gray, grayW, grayH) else xs
-            pts += floatArrayOf(xFinal, y)
+            pts += floatArrayOf(xFinal, y, exr.coerceIn(0.1f, 1f))   // [x, y, confidence weight]
         }
         if (pts.size < MIN_LANE_POINTS) return emptyList()
         return polyfitSmooth(pts)
@@ -139,34 +140,40 @@ class LaneDetector(
     }
 
     /**
-     * Replace the raw per-row points with a quadratic least-squares fit x = a·y² +
-     * b·y + c (one outlier-rejection pass), resampled at the same y's. A lane is a
-     * smooth curve, so this removes the spatial zig-zag (e.g. from dashed markings)
-     * that per-row argmax leaves behind. Falls back to the raw points if the fit is
-     * degenerate.
+     * Robust quadratic fit x = a·y² + b·y + c, resampled at the same y's. Uses
+     * iteratively-reweighted least squares (IRLS): start from the per-point
+     * confidence weights (existence), then re-weight by a Cauchy function of the
+     * residual for a few passes so a confidently-wrong far-field outlier (which the
+     * model still flags existence≈1) is suppressed instead of bending the curve.
+     * Falls back to the raw points if the fit is degenerate.
      */
     private fun polyfitSmooth(pts: List<FloatArray>): List<FloatArray> {
-        var c = fitQuadratic(pts) ?: return pts
-        // Drop points far from the fit, then refit once for robustness to outliers.
-        val res = pts.map { abs(it[0] - evalQuad(c, it[1])) }
-        val thr = max(0.03f, 2.5f * res.sorted()[res.size / 2])
-        val inliers = pts.filterIndexed { i, _ -> res[i] <= thr }
-        if (inliers.size in MIN_LANE_POINTS until pts.size) c = fitQuadratic(inliers) ?: c
+        if (pts.size < 3) return pts
+        val n = pts.size
+        val w = FloatArray(n) { pts[it][2] }                       // confidence (existence) weight
+        var c = fitWeighted(pts, w) ?: return pts
+        repeat(IRLS_ITERS) {
+            for (i in 0 until n) {
+                val res = (pts[i][0] - evalQuad(c, pts[i][1])) / IRLS_SCALE
+                w[i] = pts[i][2] * (1f / (1f + res * res))          // Cauchy robust weight
+            }
+            c = fitWeighted(pts, w) ?: c
+        }
         val cc = c
         return pts.map { floatArrayOf(evalQuad(cc, it[1]).coerceIn(0f, 1f), it[1]) }
     }
 
     private fun evalQuad(c: FloatArray, y: Float) = c[0] * y * y + c[1] * y + c[2]
 
-    /** Least-squares quadratic fit of x vs y; null if the normal matrix is singular. */
-    private fun fitQuadratic(pts: List<FloatArray>): FloatArray? {
+    /** Weighted least-squares quadratic fit of x vs y; null if the matrix is singular. */
+    private fun fitWeighted(pts: List<FloatArray>, w: FloatArray): FloatArray? {
         var s0 = 0.0; var s1 = 0.0; var s2 = 0.0; var s3 = 0.0; var s4 = 0.0
         var t0 = 0.0; var t1 = 0.0; var t2 = 0.0
-        for (p in pts) {
-            val y = p[1].toDouble(); val x = p[0].toDouble()
+        for (i in pts.indices) {
+            val y = pts[i][1].toDouble(); val x = pts[i][0].toDouble(); val wi = w[i].toDouble()
             val y2 = y * y
-            s0 += 1.0; s1 += y; s2 += y2; s3 += y2 * y; s4 += y2 * y2
-            t0 += x; t1 += x * y; t2 += x * y2
+            s0 += wi; s1 += wi * y; s2 += wi * y2; s3 += wi * y2 * y; s4 += wi * y2 * y2
+            t0 += wi * x; t1 += wi * x * y; t2 += wi * x * y2
         }
         // Solve [[s4,s3,s2],[s3,s2,s1],[s2,s1,s0]] · [a,b,c] = [t2,t1,t0] (Cramer's rule).
         val det = s4 * (s2 * s0 - s1 * s1) - s3 * (s3 * s0 - s1 * s2) + s2 * (s3 * s1 - s2 * s2)
@@ -198,5 +205,7 @@ class LaneDetector(
         const val MIN_LANE_POINTS = 6
         const val SNAP_WINDOW_NORM = 0.025f   // horizontal search half-width (frac of width)
         const val SNAP_MIN_CONTRAST = 28      // peak must beat the local-window mean by this (0..255)
+        const val IRLS_ITERS = 3              // robust reweighting passes
+        const val IRLS_SCALE = 0.04f          // residual (norm-x) at which a point's weight halves
     }
 }
