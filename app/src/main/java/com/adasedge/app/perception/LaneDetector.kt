@@ -35,7 +35,10 @@ class LaneDetector(
     private val numRow: Int = 56,
     private val griding: Int = 100,
     private val minConfidence: Float = 0.35f,
-    // Hood line (normalized full-frame y); lane points below it are dropped. 1.0 = none.
+    // Draw band (normalized full-frame y): keep lane points in [horizonRatio,
+    // roadBottomRatio] only. Above the horizon the far anchors are sky (the model's
+    // existence flag is unreliable there → a wide blob); below the hood is the car.
+    private val horizonRatio: Float = Calibration.DEFAULT.horizonRatio,
     private val roadBottomRatio: Float = Calibration.DEFAULT.roadBottomRatio,
     // Row-anchor y-positions in the FULL frame. The exported model is TuSimple, whose
     // anchors are linspace(160, 710, num_row)/720 of the original image — NOT the
@@ -76,9 +79,9 @@ class LaneDetector(
                 val v = loc.data[base + c]
                 if (v > bestVal) { bestVal = v; bestCol = c }
             }
-            // Row anchor's full-frame y; drop anything below the hood line.
+            // Row anchor's full-frame y; keep only points inside the road draw band.
             val y = rowAnchorMin + (r / (numRow - 1f)) * (rowAnchorMax - rowAnchorMin)
-            val present = (y <= roadBottomRatio) &&
+            val present = (y in horizonRatio..roadBottomRatio) &&
                 (exist?.let { it.data[lane * numRow + r] > EXIST_THRESHOLD } ?: (bestVal > minConfidence))
             if (!present) { smooth[r] = Float.NaN; continue }
 

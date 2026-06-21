@@ -33,7 +33,7 @@ class PerceptionEngine(
         EngineFactory.create(context, "lane", 3, Config.LANE_INPUT_H, Config.LANE_INPUT_W)
     }.getOrNull()
     private val laneDetector = laneRunner?.let {
-        LaneDetector(it, roadBottomRatio = calib.roadBottomRatio)
+        LaneDetector(it, horizonRatio = calib.horizonRatio, roadBottomRatio = calib.roadBottomRatio)
     }
     private val classicalLanes = ClassicalLaneFallback()
 
