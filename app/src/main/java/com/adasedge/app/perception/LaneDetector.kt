@@ -57,18 +57,26 @@ class LaneDetector(
     private val smoothLeft = FloatArray(numRow) { Float.NaN }
     private val smoothRight = FloatArray(numRow) { Float.NaN }
 
-    // Homographies for the bird's-eye fit (perspective <-> top-down), built once from
-    // the calibration: the road trapezoid -> a rectangle, so lanes become ~vertical.
-    private val bevH: DoubleArray? = if (birdEyeFit) bevHomography(false) else null
-    private val bevHinv: DoubleArray? = if (birdEyeFit) bevHomography(true) else null
+    // Self-aligning bird's-eye homography. The source trapezoid is the EGO LANE itself
+    // (its two boundary lines at trapTopY/trapBotY), estimated from the detected lanes
+    // and temporally smoothed — so the warp tracks the real road on any mount instead
+    // of a fixed calibration shape, and the lanes warp to ~vertical by construction.
+    private val trapTopY = horizonRatio
+    private val trapBotY = roadBottomRatio
+    // [topLeftX, topRightX, botLeftX, botRightX]; seeded from calibration, then refined.
+    private val corners = floatArrayOf(
+        centerRatio - BEV_TOP_HALF.toFloat(), centerRatio + BEV_TOP_HALF.toFloat(),
+        centerRatio - BEV_BOT_HALF.toFloat(), centerRatio + BEV_BOT_HALF.toFloat(),
+    )
+    private var bevH: DoubleArray? = if (birdEyeFit) buildH(false) else null
+    private var bevHinv: DoubleArray? = if (birdEyeFit) buildH(true) else null
 
-    private fun bevHomography(inverse: Boolean): DoubleArray {
-        val c = centerRatio.toDouble()
+    private fun buildH(inverse: Boolean): DoubleArray {
         val src = org.opencv.core.MatOfPoint2f(
-            org.opencv.core.Point(c - BEV_TOP_HALF, horizonRatio.toDouble()),
-            org.opencv.core.Point(c + BEV_TOP_HALF, horizonRatio.toDouble()),
-            org.opencv.core.Point(c + BEV_BOT_HALF, roadBottomRatio.toDouble()),
-            org.opencv.core.Point(c - BEV_BOT_HALF, roadBottomRatio.toDouble()),
+            org.opencv.core.Point(corners[0].toDouble(), trapTopY.toDouble()),   // top-left
+            org.opencv.core.Point(corners[1].toDouble(), trapTopY.toDouble()),   // top-right
+            org.opencv.core.Point(corners[3].toDouble(), trapBotY.toDouble()),   // bottom-right
+            org.opencv.core.Point(corners[2].toDouble(), trapBotY.toDouble()),   // bottom-left
         )
         val dst = org.opencv.core.MatOfPoint2f(
             org.opencv.core.Point(BEV_X0, 0.0), org.opencv.core.Point(BEV_X1, 0.0),
@@ -79,6 +87,38 @@ class LaneDetector(
         val arr = DoubleArray(9); m.get(0, 0, arr)
         m.release(); src.release(); dst.release()
         return arr
+    }
+
+    /** Re-estimate the source trapezoid from the detected lanes (their boundary lines
+     *  at trapTopY/trapBotY) and EMA it, then rebuild the homography. Falls back to the
+     *  last/seed trapezoid when a frame's lanes are missing or implausible. */
+    private fun updateHomography(left: List<FloatArray>, right: List<FloatArray>) {
+        if (left.size >= MIN_LANE_POINTS && right.size >= MIN_LANE_POINTS) {
+            val l = fitLine(left); val r = fitLine(right)
+            val tlx = l[0] * trapTopY + l[1]; val blx = l[0] * trapBotY + l[1]
+            val trx = r[0] * trapTopY + r[1]; val brx = r[0] * trapBotY + r[1]
+            // sanity: left of right, plausible widths, on-frame-ish
+            if (trx - tlx > 0.005f && brx - blx > 0.04f && tlx > -0.3f && brx < 1.3f) {
+                corners[0] += CORNER_EMA * (tlx - corners[0])
+                corners[1] += CORNER_EMA * (trx - corners[1])
+                corners[2] += CORNER_EMA * (blx - corners[2])
+                corners[3] += CORNER_EMA * (brx - corners[3])
+                bevH = buildH(false); bevHinv = buildH(true)
+                return
+            }
+        }
+        if (bevH == null) { bevH = buildH(false); bevHinv = buildH(true) }   // ensure seeded
+    }
+
+    /** Least-squares line x = m·y + c over the points (m≈0 for a vertical lane). */
+    private fun fitLine(pts: List<FloatArray>): FloatArray {
+        var sy = 0.0; var sy2 = 0.0; var sx = 0.0; var sxy = 0.0
+        for (p in pts) { val y = p[1].toDouble(); val x = p[0].toDouble(); sy += y; sy2 += y * y; sx += x; sxy += x * y }
+        val n = pts.size
+        val den = n * sy2 - sy * sy
+        if (kotlin.math.abs(den) < 1e-9) return floatArrayOf(0f, (sx / n).toFloat())
+        val m = (n * sxy - sy * sx) / den
+        return floatArrayOf(m.toFloat(), ((sx - m * sy) / n).toFloat())
     }
 
     /**
@@ -96,7 +136,8 @@ class LaneDetector(
         val rightRaw = decodeLane(loc, exist, EGO_RIGHT_LANE, smoothRight, gray, grayW, grayH)
         if (leftRaw.isEmpty() && rightRaw.isEmpty()) return null
 
-        val (left, right) = if (birdEyeFit && bevH != null && bevHinv != null) {
+        val (left, right) = if (birdEyeFit) {
+            updateHomography(leftRaw, rightRaw)   // self-align the top-down warp to the lanes
             bevFit(leftRaw, rightRaw)
         } else {
             (if (leftRaw.isEmpty()) emptyList() else smoothLane(leftRaw)) to
@@ -306,10 +347,11 @@ class LaneDetector(
         const val AVG_RADIUS = 2              // moving-average window radius (de-zigzag)
         const val IRLS_ITERS = 3             // robust reweighting passes (bird's-eye fit)
         const val IRLS_SCALE = 0.05f         // BEV residual (norm) at which a point's weight halves
-        // Bird's-eye source trapezoid (road) half-widths, normalized; -> a rectangle.
+        // Bird's-eye source trapezoid SEED half-widths (used until the lanes refine it).
         const val BEV_TOP_HALF = 0.06        // near the horizon (lanes nearly meet)
         const val BEV_BOT_HALF = 0.42        // near the camera (lanes wide)
         const val BEV_X0 = 0.25              // destination rectangle left/right
         const val BEV_X1 = 0.75
+        const val CORNER_EMA = 0.1f          // how fast the self-aligning trapezoid tracks the lanes
     }
 }
