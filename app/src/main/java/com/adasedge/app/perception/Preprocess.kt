@@ -62,20 +62,19 @@ object Preprocess {
      * the bottom [dstH] rows. Returns an NCHW [0,1] RGB input. Lane-y is remapped to
      * full-frame space in LaneDetector using the same [horizonRatio]/[cropRatio].
      */
-    fun toLaneInput(src: Bitmap, dstW: Int, dstH: Int, horizonRatio: Float, roadBottomRatio: Float, cropRatio: Float): FloatArray {
+    fun toLaneInput(src: Bitmap, dstW: Int, dstH: Int, cropRatio: Float): FloatArray {
+        // Match UFLDv2's training/deploy preprocessing exactly: resize the WHOLE frame
+        // to (dstH/cropRatio) tall then take the bottom dstH rows (drop the top sky =
+        // 1-cropRatio). The model's row anchors are full-frame positions, so feeding
+        // the full frame (NOT a horizon-cropped band) keeps the lanes aligned.
         val fullH = Math.round(dstH / cropRatio)
         val cropTop = fullH - dstH
-        val srcTop = (src.height * horizonRatio).toInt().coerceIn(0, src.height - 2)
-        // Crop the bottom (car hood) too: the road band is [srcTop, srcBottom].
-        val srcBottom = (src.height * roadBottomRatio).toInt().coerceIn(srcTop + 2, src.height)
-        val srcBandH = srcBottom - srcTop
-        val sy = fullH.toFloat() / srcBandH
+        val sy = fullH.toFloat() / src.height
         val scaled = Bitmap.createBitmap(dstW, fullH, Bitmap.Config.ARGB_8888)
         val canvas = Canvas(scaled)
-        // Map source rows [srcTop, srcBottom] -> dst rows [0, fullH] (sky + hood dropped).
+        // Map the whole source [0, srcH] -> dst rows [0, fullH]; we keep the bottom dstH.
         val m = Matrix().apply {
             setScale(dstW.toFloat() / src.width, sy)
-            postTranslate(0f, -srcTop * sy)
         }
         canvas.drawBitmap(src, m, Paint(Paint.FILTER_BITMAP_FLAG))
 

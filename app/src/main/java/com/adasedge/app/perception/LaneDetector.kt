@@ -35,21 +35,18 @@ class LaneDetector(
     private val numRow: Int = 56,
     private val griding: Int = 100,
     private val minConfidence: Float = 0.35f,
-    private val cropRatio: Float = Config.LANE_CROP_RATIO,
-    private val horizonRatio: Float = Calibration.DEFAULT.horizonRatio,
+    // Hood line (normalized full-frame y); lane points below it are dropped. 1.0 = none.
     private val roadBottomRatio: Float = Calibration.DEFAULT.roadBottomRatio,
-    // UFLDv2 TuSimple row anchors span only [0.42, 1.0] of the model input
-    // (deploy: row_anchor = linspace(0.42, 1, num_row)), NOT the full input height.
-    private val rowAnchorMin: Float = 0.42f,
-    private val rowAnchorMax: Float = 1.0f,
+    // Row-anchor y-positions in the FULL frame. The exported model is TuSimple, whose
+    // anchors are linspace(160, 710, num_row)/720 of the original image — NOT the
+    // CULane [0.42, 1.0]. The model input is the full frame's bottom crop_ratio
+    // (Preprocess.toLaneInput feeds exactly that), so a row anchor maps straight to
+    // this full-frame y — no horizon/crop band, which is what mis-positioned the lanes.
+    private val rowAnchorMin: Float = 160f / 720f,   // 0.2222
+    private val rowAnchorMax: Float = 710f / 720f,   // 0.9861
     // Temporal low-pass factor on each row's column (1.0 = no smoothing).
     private val temporalAlpha: Float = 0.5f,
 ) {
-    // Lane-input region in full-frame normalized-y: [yTop, yBottom]. yTop drops the
-    // sky (horizon) + UFLDv2's internal top-crop; yBottom drops the car hood.
-    private val yBottom = roadBottomRatio
-    private val yTop = horizonRatio + (1f - cropRatio) * (roadBottomRatio - horizonRatio)
-
     // Per-row temporal EMA of each ego lane's column (normalized x); NaN = unset.
     private val smoothLeft = FloatArray(numRow) { Float.NaN }
     private val smoothRight = FloatArray(numRow) { Float.NaN }
@@ -79,7 +76,10 @@ class LaneDetector(
                 val v = loc.data[base + c]
                 if (v > bestVal) { bestVal = v; bestCol = c }
             }
-            val present = exist?.let { it.data[lane * numRow + r] > EXIST_THRESHOLD } ?: (bestVal > minConfidence)
+            // Row anchor's full-frame y; drop anything below the hood line.
+            val y = rowAnchorMin + (r / (numRow - 1f)) * (rowAnchorMax - rowAnchorMin)
+            val present = (y <= roadBottomRatio) &&
+                (exist?.let { it.data[lane * numRow + r] > EXIST_THRESHOLD } ?: (bestVal > minConfidence))
             if (!present) { smooth[r] = Float.NaN; continue }
 
             // Soft-argmax: softmax-weighted column over a +/-LOCAL_W window (sub-cell).
@@ -95,8 +95,6 @@ class LaneDetector(
             val xs = if (smooth[r].isNaN()) xRaw else smooth[r] + temporalAlpha * (xRaw - smooth[r])
             smooth[r] = xs
 
-            val anchorFrac = rowAnchorMin + (r / (numRow - 1f)) * (rowAnchorMax - rowAnchorMin)
-            val y = yTop + anchorFrac * (yBottom - yTop)
             pts += floatArrayOf(xs, y)
         }
         return if (pts.size >= MIN_LANE_POINTS) pts else emptyList()
