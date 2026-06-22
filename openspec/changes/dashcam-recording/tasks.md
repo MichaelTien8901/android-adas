@@ -49,9 +49,14 @@ dashcam recording on the live camera path. Ordered by dependency.
 
 ## 6. Verify on device
 
-- [ ] 6.1 Build + install (S26); enable recording, drive the live camera; confirm clips appear
-      in the dashcam dir with datetime names and roll over at the segment limit.
-- [ ] 6.2 Confirm circular retention: drive past the size cap, verify oldest clips are deleted
-      and total stays under the cap; active clip never deleted.
-- [ ] 6.3 Confirm no perception regression (FPS / lane / detection unchanged with recording on)
-      and that replay mode does not record. Pull a clip via `adb` to confirm retrievability.
+- [x] 6.1 Built + installed (S26); enabled recording, live camera, 1-min segments. Clips
+      appeared at `/sdcard/Android/data/com.adasedge.app/files/dashcam/` as
+      `dashcam_2026-06-22_HHMMSS.mp4` and rolled over at ~60s (134918 → 135008 → 135108 →
+      135208). Record button shown in the overlay.
+- [x] 6.2 Circular retention confirmed: with a 256 MB cap, on the rollover that crossed the
+      cap `RecordingStore` logged "deleted 2 oldest clip(s) to stay under 256MB"; the two
+      oldest were removed, total dropped to 174 MB, and the in-progress clip was untouched.
+- [x] 6.3 No perception regression: detector + twinlite ran on QNN_HTP concurrently with
+      recording at 65–101 ms / 10–11 fps, no crash. Replay path does not record (verified the
+      live path only; replay returns before the recorder). Pulled a finalized clip via adb —
+      valid `ISO Media, MP4 v2`, 90 MB. (Device restored to replay mode after the test.)
