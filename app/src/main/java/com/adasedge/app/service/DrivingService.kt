@@ -86,6 +86,10 @@ class DrivingService : LifecycleService() {
     val runtimeStatus: StateFlow<RuntimeStatus> = _status.asStateFlow()
     private val _error = MutableStateFlow<String?>(null)
     val error: StateFlow<String?> = _error.asStateFlow()
+    // Live dashcam recording state, so the overlay record button reflects reality (incl. the
+    // auto-start-on-drive-start option, which just sets this button's initial state).
+    private val _recording = MutableStateFlow(false)
+    val recording: StateFlow<Boolean> = _recording.asStateFlow()
 
     inner class LocalBinder : Binder() { val service get() = this@DrivingService }
     private val binder = LocalBinder()
@@ -153,7 +157,7 @@ class DrivingService : LifecycleService() {
         camera.start(
             this, surfaceProvider, Size(1280, 720),
             videoCapture = videoCapture,
-            onVideoReady = { if (prefs.dashcamAutoStart) dashcam?.start() },
+            onVideoReady = { if (prefs.dashcamAutoStart) { dashcam?.start(); _recording.value = true } },
             onVideoBindFailed = {
                 dashcam?.shutdown(); dashcam = null
                 _error.value = "Dashcam unavailable on this device (camera can't record + analyze together)"
@@ -166,9 +170,8 @@ class DrivingService : LifecycleService() {
     fun setRecording(on: Boolean) {
         val d = dashcam ?: return
         if (on) d.start() else d.stop()
+        _recording.value = on
     }
-
-    fun isRecording(): Boolean = dashcam?.isRecording == true
 
     fun recordingAvailable(): Boolean = dashcam != null
 

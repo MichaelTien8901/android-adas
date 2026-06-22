@@ -67,22 +67,16 @@ class DrivingActivity : AppCompatActivity() {
     private var feedOn = true
 
     /** Live record on/off control. Hidden unless dashcam recording is available this session
-     *  (the Settings master toggle is on and the camera bound a VideoCapture). */
+     *  (the Settings master toggle is on and the camera bound a VideoCapture). The button is
+     *  the manual control; the auto-start-on-drive-start option just sets its initial state.
+     *  The label tracks the actual recording state via svc.recording (see observe()). */
     private fun setupRecordButton(svc: DrivingService) {
         if (!svc.recordingAvailable()) {
             binding.recordButton.visibility = View.GONE
             return
         }
         binding.recordButton.visibility = View.VISIBLE
-        refreshRecordLabel(svc)
-        binding.recordButton.setOnClickListener {
-            svc.setRecording(!svc.isRecording())
-            refreshRecordLabel(svc)
-        }
-    }
-
-    private fun refreshRecordLabel(svc: DrivingService) {
-        binding.recordButton.setText(if (svc.isRecording()) R.string.record_on else R.string.record_off)
+        binding.recordButton.setOnClickListener { svc.setRecording(!svc.recording.value) }
     }
 
     override fun onStart() {
@@ -111,6 +105,11 @@ class DrivingActivity : AppCompatActivity() {
                 }
                 launch {
                     svc.replayFrame.collect { binding.overlay.submitBackground(it) }
+                }
+                launch {
+                    svc.recording.collect { rec ->
+                        binding.recordButton.setText(if (rec) R.string.record_on else R.string.record_off)
+                    }
                 }
             }
         }
