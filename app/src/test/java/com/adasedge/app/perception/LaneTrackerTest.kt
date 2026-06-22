@@ -62,15 +62,17 @@ class LaneTrackerTest {
 
     @Test
     fun coasts_through_gaps_then_goes_stale() {
+        // Mirrors LaneTracker.TRACK_COAST_MAX (12 frames, ~2.4s at 5 fps).
+        val coastMax = 12
         val t = tracker()
         repeat(5) { t.update(line(0.30f), line(0.70f), 0.9f) }
         // Empty frames (dashed gap / dropout): the track predicts through the budget.
         var lastNonEmpty = 0
-        for (frame in 1..6) {
+        for (frame in 1..coastMax) {
             val (l, _) = t.update(emptyList(), emptyList(), 0.5f)
             if (l.isNotEmpty()) lastNonEmpty = frame
         }
-        assertEquals("coasts through the full budget", 6, lastNonEmpty)
+        assertEquals("coasts through the full budget", coastMax, lastNonEmpty)
         // One frame past the budget → stale → unavailable.
         val (l7, r7) = t.update(emptyList(), emptyList(), 0.5f)
         assertTrue("left stale", l7.isEmpty())
@@ -81,7 +83,7 @@ class LaneTrackerTest {
     fun reacquires_after_going_stale() {
         val t = tracker()
         repeat(3) { t.update(line(0.30f), line(0.70f), 0.9f) }
-        repeat(8) { t.update(emptyList(), emptyList(), 0.5f) }   // drive the track stale
+        repeat(14) { t.update(emptyList(), emptyList(), 0.5f) }  // drive past TRACK_COAST_MAX (12) → stale
         // A fresh, very different lane appears; the tracker re-seeds rather than gating
         // it forever (bounded coast lets a persistent new geometry be re-acquired).
         val (l, r) = t.update(line(0.45f), line(0.80f), 0.9f)

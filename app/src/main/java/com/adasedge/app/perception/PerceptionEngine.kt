@@ -31,16 +31,19 @@ class PerceptionEngine(
     private val laneMarkingSnap: Boolean = false,
     birdEyeLaneFit: Boolean = false,
     laneStabilityTracker: Boolean = false,
-    private val laneModel: String = "ufldv2",
+    private val laneModel: String = "twinlite",
 ) : Closeable {
 
     private val detectorRunner: ModelRunner =
         EngineFactory.create(context, "detector", 3, Config.MODEL_INPUT_SIZE, Config.MODEL_INPUT_SIZE)
     private val detector = ObjectDetector(detectorRunner)
 
-    private val laneRunner: ModelRunner? = runCatching {
-        EngineFactory.create(context, "lane", 3, Config.LANE_INPUT_H, Config.LANE_INPUT_W)
-    }.getOrNull()
+    // UFLDv2 is the legacy fallback now that "twinlite" is the default — only load its
+    // 62 MB model when it's the selected detector (TwinLite supersedes it otherwise).
+    private val laneRunner: ModelRunner? =
+        if (laneModel != "twinlite") runCatching {
+            EngineFactory.create(context, "lane", 3, Config.LANE_INPUT_H, Config.LANE_INPUT_W)
+        }.getOrNull() else null
     private val laneDetector = laneRunner?.let {
         LaneDetector(it, horizonRatio = calib.horizonRatio, roadBottomRatio = calib.roadBottomRatio,
             centerRatio = calib.centerRatio, birdEyeFit = birdEyeLaneFit,

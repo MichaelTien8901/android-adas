@@ -48,10 +48,11 @@ class Prefs(context: Context) {
         get() = sp.getBoolean(KEY_LANE_TRACKER, false)
         set(v) = sp.edit { putBoolean(KEY_LANE_TRACKER, v) }
 
-    /** Lane-detector bake-off selector: "ufldv2" (shipped) | "twinlite" (drivable-area
-        + lane segmentation spike). Evaluated on the replay paint-deviation benchmark. */
+    /** Lane-detector selector: "twinlite" (default — drivable-area + lane segmentation,
+        ego boundaries read directly from the lane-line mask; beat UFLDv2 on the replay
+        paint-deviation benchmark and runs on the S26 NPU) | "ufldv2" (legacy fallback). */
     var laneModel: String
-        get() = sp.getString(KEY_LANE_MODEL, "ufldv2") ?: "ufldv2"
+        get() = sp.getString(KEY_LANE_MODEL, "twinlite") ?: "twinlite"
         set(v) = sp.edit { putString(KEY_LANE_MODEL, v) }
 
     var hudMirror: Boolean
