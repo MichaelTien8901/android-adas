@@ -95,6 +95,7 @@ dependencies {
     implementation("androidx.camera:camera-camera2:$camerax")
     implementation("androidx.camera:camera-lifecycle:$camerax")
     implementation("androidx.camera:camera-view:$camerax")
+    implementation("androidx.camera:camera-video:$camerax")
 
     // Fused location (GPS speed)
     implementation("com.google.android.gms:play-services-location:21.3.0")

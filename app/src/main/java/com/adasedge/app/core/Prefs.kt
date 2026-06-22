@@ -38,6 +38,24 @@ class Prefs(context: Context) {
         get() = sp.getBoolean(KEY_HUD, false)
         set(v) = sp.edit { putBoolean(KEY_HUD, v) }
 
+    /** Dashcam recording master switch. When off, no VideoCapture is bound and the
+        pipeline is unchanged (no added cost). Default off. */
+    var dashcamEnabled: Boolean
+        get() = sp.getBoolean(KEY_DASHCAM, false)
+        set(v) = sp.edit { putBoolean(KEY_DASHCAM, v) }
+
+    /** Max duration per clip file (minutes); the recorder rolls over to a new file at
+        this limit. Default 3 min. */
+    var dashcamSegmentMinutes: Int
+        get() = sp.getInt(KEY_DASHCAM_SEG_MIN, 3)
+        set(v) = sp.edit { putInt(KEY_DASHCAM_SEG_MIN, v.coerceIn(1, 30)) }
+
+    /** Total storage cap for the dashcam clip directory (MB); oldest clips are deleted
+        first to stay under it. Default 2048 MB. */
+    var dashcamMaxStorageMb: Int
+        get() = sp.getInt(KEY_DASHCAM_MAX_MB, 2048)
+        set(v) = sp.edit { putInt(KEY_DASHCAM_MAX_MB, v.coerceIn(256, 65536)) }
+
     var fcwEnabled: Boolean
         get() = sp.getBoolean(KEY_FCW, true)
         set(v) = sp.edit { putBoolean(KEY_FCW, v) }
@@ -89,6 +107,9 @@ class Prefs(context: Context) {
         private const val KEY_VOICE = "voice"
         private const val KEY_LANE_MODEL = "lane_model"
         private const val KEY_HUD = "hud"
+        private const val KEY_DASHCAM = "dashcam_enabled"
+        private const val KEY_DASHCAM_SEG_MIN = "dashcam_segment_minutes"
+        private const val KEY_DASHCAM_MAX_MB = "dashcam_max_storage_mb"
         private const val KEY_FCW = "fcw"
         private const val KEY_LDW = "ldw"
         private const val KEY_HEADWAY = "headway"

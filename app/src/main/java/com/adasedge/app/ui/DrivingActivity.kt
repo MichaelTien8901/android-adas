@@ -37,6 +37,7 @@ class DrivingActivity : AppCompatActivity() {
             val svc = (b as DrivingService.LocalBinder).service
             service = svc
             svc.attachPreview(binding.previewView.surfaceProvider)
+            setupRecordButton(svc)
             observe(svc)
         }
         override fun onServiceDisconnected(name: ComponentName?) { service = null }
@@ -64,6 +65,25 @@ class DrivingActivity : AppCompatActivity() {
     }
 
     private var feedOn = true
+
+    /** Live record on/off control. Hidden unless dashcam recording is available this session
+     *  (the Settings master toggle is on and the camera bound a VideoCapture). */
+    private fun setupRecordButton(svc: DrivingService) {
+        if (!svc.recordingAvailable()) {
+            binding.recordButton.visibility = View.GONE
+            return
+        }
+        binding.recordButton.visibility = View.VISIBLE
+        refreshRecordLabel(svc)
+        binding.recordButton.setOnClickListener {
+            svc.setRecording(!svc.isRecording())
+            refreshRecordLabel(svc)
+        }
+    }
+
+    private fun refreshRecordLabel(svc: DrivingService) {
+        binding.recordButton.setText(if (svc.isRecording()) R.string.record_on else R.string.record_off)
+    }
 
     override fun onStart() {
         super.onStart()

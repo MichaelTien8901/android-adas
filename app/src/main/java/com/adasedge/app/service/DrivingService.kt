@@ -18,6 +18,8 @@ import androidx.lifecycle.LifecycleService
 import com.adasedge.app.R
 import com.adasedge.app.alert.AlertController
 import com.adasedge.app.camera.CameraController
+import com.adasedge.app.recording.DashcamRecorder
+import com.adasedge.app.recording.RecordingStore
 import com.adasedge.app.core.Calibration
 import com.adasedge.app.core.Prefs
 import com.adasedge.app.inference.FrameScheduler
@@ -61,6 +63,7 @@ class DrivingService : LifecycleService() {
     private lateinit var warnings: WarningManager
     private lateinit var alert: AlertController
     private var perception: PerceptionEngine? = null
+    private var dashcam: DashcamRecorder? = null
 
     private val frameCounter = AtomicLong(0)
     private var started = false
@@ -139,8 +142,35 @@ class DrivingService : LifecycleService() {
             return
         }
         speed.start()
-        camera.start(this, surfaceProvider, Size(1280, 720)) { bmp, ts -> onFrame(bmp, ts) }
+        // Dashcam recording (live camera only — replay returned above). Bind a VideoCapture
+        // as a 3rd use case and auto-start recording once it's bound; gracefully disable if
+        // the device can't support the 3-use-case combo.
+        val videoCapture = if (prefs.dashcamEnabled) {
+            val store = RecordingStore(this, prefs.dashcamMaxStorageMb)
+            DashcamRecorder(this, store, prefs.dashcamSegmentMinutes) { msg -> _error.value = msg }
+                .also { dashcam = it }.videoCapture
+        } else null
+        camera.start(
+            this, surfaceProvider, Size(1280, 720),
+            videoCapture = videoCapture,
+            onVideoReady = { dashcam?.start() },
+            onVideoBindFailed = {
+                dashcam?.shutdown(); dashcam = null
+                _error.value = "Dashcam unavailable on this device (camera can't record + analyze together)"
+            },
+            sink = { bmp, ts -> onFrame(bmp, ts) },
+        )
     }
+
+    /** Live-session record control (overlay button); overrides the auto-start default. */
+    fun setRecording(on: Boolean) {
+        val d = dashcam ?: return
+        if (on) d.start() else d.stop()
+    }
+
+    fun isRecording(): Boolean = dashcam?.isRecording == true
+
+    fun recordingAvailable(): Boolean = dashcam != null
 
     private fun onFrame(bitmap: Bitmap, tsNanos: Long) {
         val engine = perception ?: run { bitmap.recycle(); return }
@@ -282,6 +312,7 @@ class DrivingService : LifecycleService() {
         // Stop the producers first (no new frames submitted), then drain the in-flight
         // perception task before closing the engine — otherwise the worker could touch a
         // closed engine / recycled native context.
+        dashcam?.shutdown(); dashcam = null   // finalize the in-progress clip before unbinding
         replay.stop(); camera.stop()
         perceptionExecutor.shutdown()
         runCatching { perceptionExecutor.awaitTermination(2, TimeUnit.SECONDS) }

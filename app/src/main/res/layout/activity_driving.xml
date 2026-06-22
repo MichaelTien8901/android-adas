@@ -30,4 +30,14 @@
         android:layout_gravity="top|start"
         android:layout_margin="12dp"
         android:text="@string/feed_on" />
+
+    <Button
+        android:id="@+id/recordButton"
+        style="?attr/materialButtonOutlinedStyle"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="bottom|start"
+        android:layout_margin="12dp"
+        android:visibility="gone"
+        android:text="@string/record_off" />
 </FrameLayout>

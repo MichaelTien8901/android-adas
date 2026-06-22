@@ -41,6 +41,50 @@
         <com.google.android.material.materialswitch.MaterialSwitch
             android:id="@+id/tsr" style="@style/SettingsSwitch" android:text="@string/pref_tsr" />
 
+        <TextView style="@style/SettingsSection" android:text="@string/settings_recording" />
+
+        <com.google.android.material.materialswitch.MaterialSwitch
+            android:id="@+id/dashcam" style="@style/SettingsSwitch" android:text="@string/pref_dashcam" />
+        <TextView
+            android:layout_width="match_parent" android:layout_height="wrap_content"
+            android:layout_marginBottom="8dp" android:lineSpacingMultiplier="1.25"
+            android:text="@string/pref_dashcam_hint"
+            android:textColor="@color/text_muted" android:textSize="13sp" />
+
+        <LinearLayout
+            android:layout_width="match_parent" android:layout_height="wrap_content"
+            android:orientation="horizontal" android:gravity="center_vertical"
+            android:layout_marginBottom="8dp">
+            <TextView
+                android:layout_width="0dp" android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="@string/pref_dashcam_segment"
+                android:textColor="@color/text_primary" android:textSize="16sp" />
+            <EditText
+                android:id="@+id/dashcamSegMin"
+                android:layout_width="96dp" android:layout_height="wrap_content"
+                android:inputType="number" android:maxLength="2" android:gravity="end"
+                android:textColor="@color/text_primary"
+                android:autofillHints="" />
+        </LinearLayout>
+
+        <LinearLayout
+            android:layout_width="match_parent" android:layout_height="wrap_content"
+            android:orientation="horizontal" android:gravity="center_vertical"
+            android:layout_marginBottom="8dp">
+            <TextView
+                android:layout_width="0dp" android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="@string/pref_dashcam_storage"
+                android:textColor="@color/text_primary" android:textSize="16sp" />
+            <EditText
+                android:id="@+id/dashcamMaxMb"
+                android:layout_width="120dp" android:layout_height="wrap_content"
+                android:inputType="number" android:maxLength="5" android:gravity="end"
+                android:textColor="@color/text_primary"
+                android:autofillHints="" />
+        </LinearLayout>
+
         <TextView style="@style/SettingsSection" android:text="@string/settings_camera" />
 
         <Button

@@ -9,6 +9,7 @@ import androidx.camera.core.CameraSelector
 import androidx.camera.core.ImageAnalysis
 import androidx.camera.core.ImageProxy
 import androidx.camera.core.Preview
+import androidx.camera.core.UseCase
 import androidx.camera.core.resolutionselector.ResolutionSelector
 import androidx.camera.core.resolutionselector.ResolutionStrategy
 import androidx.camera.lifecycle.ProcessCameraProvider
@@ -33,10 +34,19 @@ class CameraController(private val context: Context) {
     private val analysisExecutor: ExecutorService = Executors.newSingleThreadExecutor()
     private var provider: ProcessCameraProvider? = null
 
+    /**
+     * @param videoCapture optional dashcam VideoCapture to bind as a 3rd use case (only when
+     *   recording is enabled). If the device can't bind Preview+Analysis+Video together, we
+     *   fall back to Preview+Analysis and invoke [onVideoBindFailed] so recording is disabled
+     *   gracefully (perception keeps running).
+     */
     fun start(
         owner: LifecycleOwner,
         surfaceProvider: Preview.SurfaceProvider,
         analysisTarget: Size,
+        videoCapture: UseCase? = null,
+        onVideoReady: () -> Unit = {},
+        onVideoBindFailed: () -> Unit = {},
         sink: FrameSink,
     ) {
         val future = ProcessCameraProvider.getInstance(context)
@@ -69,8 +79,24 @@ class CameraController(private val context: Context) {
                 }
             }
 
+            val selector = CameraSelector.DEFAULT_BACK_CAMERA
             cameraProvider.unbindAll()
-            cameraProvider.bindToLifecycle(owner, CameraSelector.DEFAULT_BACK_CAMERA, preview, analysis)
+            try {
+                if (videoCapture != null) {
+                    cameraProvider.bindToLifecycle(owner, selector, preview, analysis, videoCapture)
+                    onVideoReady()
+                } else {
+                    cameraProvider.bindToLifecycle(owner, selector, preview, analysis)
+                }
+            } catch (t: Throwable) {
+                if (videoCapture != null) {
+                    // 3-use-case combo unsupported on this device → keep perception, drop recording.
+                    Log.w(TAG, "binding with VideoCapture failed; falling back to preview+analysis", t)
+                    runCatching { cameraProvider.unbindAll() }
+                    cameraProvider.bindToLifecycle(owner, selector, preview, analysis)
+                    onVideoBindFailed()
+                } else throw t
+            }
         }, ContextCompat.getMainExecutor(context))
     }
 
