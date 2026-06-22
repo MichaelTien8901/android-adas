@@ -200,7 +200,9 @@ class LaneTracker(
     private companion object {
         const val RESAMPLE_N = 24            // output polyline points across the draw band
         const val MIN_FIT_POINTS = 4         // measurement needs at least this many points
-        const val TRACK_COAST_MAX = 6        // max predict-only frames before a track goes stale
+        const val TRACK_COAST_MAX = 12       // max predict-only frames before a track goes stale
+                                             // (~2.4s at 5 fps; lets the right boundary survive a
+                                             // dashed/occluded gap on transitions instead of vanishing)
 
         // Initial / process / measurement (co)variances — diagonal, in normalized-x² units.
         const val P0 = 1e-2                  // initial coefficient variance (loose seed)

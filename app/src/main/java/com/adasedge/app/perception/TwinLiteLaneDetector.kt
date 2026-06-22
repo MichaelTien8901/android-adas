@@ -39,12 +39,28 @@ class TwinLiteLaneDetector(
 
     fun detect(input: FloatArray): LaneGeometry? {
         val outs = runner.run(input)
-        val ll = pick(outs, "ll", 0) ?: return null
+        // NOTE: positional fallback = 1. The ORT path finds "ll" by name; the QNN
+        // path returns unnamed out0/out1 in graph order [da, ll], so ll is index 1
+        // (index 0 = da — decoding it as lane-lines makes every centre pixel "road"
+        // and yields avail=0%).
+        val ll = pick(outs, "ll", 1) ?: return null
         val plane = segW * segH
         if (ll.data.size < 2 * plane) return null
 
+        // Vertical-window lane test: true if ANY row within ±DILATE_R at this column is
+        // a lane pixel. Bridges dashed-marking gaps (and INT8-thinned dashes) along the
+        // line's near-vertical direction WITHOUT shifting the boundary x — so the right
+        // boundary stays measured on more rows and the tracker coasts (and disappears)
+        // far less, while a genuine right drift is still detected (right-side LDW intact).
         fun isLane(x: Int, y: Int): Boolean {
-            val o = y * segW + x; return ll.data[plane + o] > ll.data[o]
+            val y0 = max(0, y - DILATE_R); val y1 = kotlin.math.min(segH - 1, y + DILATE_R)
+            var yy = y0
+            while (yy <= y1) {
+                val o = yy * segW + x
+                if (ll.data[plane + o] > ll.data[o]) return true
+                yy++
+            }
+            return false
         }
 
         val yTop = (horizonRatio * segH).toInt().coerceIn(0, segH - 1)
@@ -92,5 +108,6 @@ class TwinLiteLaneDetector(
         const val SAMPLE_ROWS = 28   // rows sampled across the road band
         const val MIN_PTS = 4
         const val MAX_HALF = 0.34f   // max |boundary − centre| (frac of width); caps the right snap
+        const val DILATE_R = 4       // vertical dilation radius (rows) to bridge dashed-line gaps
     }
 }
