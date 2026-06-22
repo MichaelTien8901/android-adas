@@ -93,3 +93,32 @@ objective paint-deviation score for TwinLiteNet vs the UFLDv2+tracker baseline.
       regression, ~176 ms vs ~205 ms CPU, right boundary holds through transitions).
       Next: a follow-up change to flip the default `laneModel` to `twinlite` and decide
       whether to retire the UFLDv2 path (or keep it as a fallback).
+
+## 5. Ship + FPS follow-on (done, on `origin/main`)
+
+- [x] 5.1 Default flipped to `twinlite`; UFLDv2 = legacy fallback, its 62 MB model
+      lazy-loaded only when re-selected. Retired the 3 experimental lane settings
+      (marking-snap / BEV-fit / stability-tracker) — the Kalman tracker is now core
+      (always on for both paths).
+- [x] 5.2 FPS optimization: (a) lane-stride — run TwinLite every 2nd frame, reuse
+      geometry between; detector/FCW stay full-rate. (b) async perception worker thread
+      so frame decode ∥ HTP inference (was serial on the delivery thread). Replay 5.4 →
+      ~7.4 fps; HTP floor ~72 ms (det 40 + amortized seg 32) ≈ ~14 fps ceiling.
+
+## 6. On-device verification (S26, HEAD = f2b4f36) — PASS
+
+- [x] 6.1 Rebuilt from HEAD (clean tree, QNN_SDK_ROOT set), reinstalled, drove the replay
+      feed end-to-end. Results:
+      - **Routing:** `detector -> QNN_HTP`, `twinlite -> QNN_HTP`, and NO `lane ->` line
+        (UFLDv2 not loaded — confirms default flip + lazy-load).
+      - **FPS:** EMA 7–10 (HUD "7 FPS"), true ~7–8 fps via the per-15-frame LANEDBG
+        cadence — up from the 5 fps baseline.
+      - **Lanes/accuracy:** `avail=100%`, jitter 0.0003–0.0008, mid ego-right R=0.65 on
+        real paint; frame shows full corridor + 2 vehicle detections. No async-race
+        corruption.
+      - **Settings:** opened `SettingsActivity` via the disclaimer Settings button — no
+        crash / InflateException; the 3 experimental toggles are absent across the whole
+        view hierarchy; remaining toggles intact.
+      - Notes: `scheduler.dropped` now climbs fast (async producer races ahead — expected
+        keep-latest backpressure, not a regression). Replay understates production FPS (its
+        producer-thread YUV→ARGB decode competes for CPU; the camera path has none).
