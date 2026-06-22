@@ -52,7 +52,14 @@ class LaneDetector(
     private val centerRatio: Float = Calibration.DEFAULT.centerRatio,
     // Fit lanes in a bird's-eye (top-down) view where they're straight & parallel.
     private val birdEyeFit: Boolean = false,
+    // Temporal lane-coefficient tracker (Kalman over [a,b,c] + outlier gating + bounded
+    // gap prediction) — the classical surrogate for openpilot's recurrent state. Off =
+    // today's per-frame pipeline unchanged. See the LaneTracker class & openspec change
+    // openpilot-inspired-lane-stability.
+    private val stabilityTracker: Boolean = false,
 ) {
+    private val tracker: LaneTracker? =
+        if (stabilityTracker) LaneTracker(horizonRatio, roadBottomRatio) else null
     // Per-row temporal EMA of each ego lane's column (normalized x); NaN = unset.
     private val smoothLeft = FloatArray(numRow) { Float.NaN }
     private val smoothRight = FloatArray(numRow) { Float.NaN }
@@ -134,7 +141,9 @@ class LaneDetector(
 
         val leftRaw = decodeLane(loc, exist, EGO_LEFT_LANE, smoothLeft, gray, grayW, grayH)
         val rightRaw = decodeLane(loc, exist, EGO_RIGHT_LANE, smoothRight, gray, grayW, grayH)
-        if (leftRaw.isEmpty() && rightRaw.isEmpty()) return null
+        // With the tracker on, keep going even on a fully-missing frame so the track can
+        // coast (predict-only) through the gap; the tracker decides final availability.
+        if (tracker == null && leftRaw.isEmpty() && rightRaw.isEmpty()) return null
 
         val (left, right) = if (birdEyeFit) {
             updateHomography(leftRaw, rightRaw)   // self-align the top-down warp to the lanes
@@ -143,7 +152,14 @@ class LaneDetector(
             (if (leftRaw.isEmpty()) emptyList() else smoothLane(leftRaw)) to
                 (if (rightRaw.isEmpty()) emptyList() else smoothLane(rightRaw))
         }
-        return LaneGeometry(left, right, existenceConfidence(exist))
+
+        val conf = existenceConfidence(exist)
+        if (tracker != null) {
+            val (tl, tr) = tracker.update(left, right, conf)
+            if (tl.isEmpty() && tr.isEmpty()) return null   // both tracks stale → unavailable
+            return LaneGeometry(tl, tr, conf)
+        }
+        return LaneGeometry(left, right, conf)
     }
 
     /** Decode one ego lane: soft-argmax per row, existence-gated, temporally smoothed,

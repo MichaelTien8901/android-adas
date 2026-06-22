@@ -29,6 +29,7 @@ class PerceptionEngine(
     private val calib: Calibration = Calibration.DEFAULT,
     private val laneMarkingSnap: Boolean = false,
     birdEyeLaneFit: Boolean = false,
+    laneStabilityTracker: Boolean = false,
 ) : Closeable {
 
     private val detectorRunner: ModelRunner =
@@ -40,7 +41,8 @@ class PerceptionEngine(
     }.getOrNull()
     private val laneDetector = laneRunner?.let {
         LaneDetector(it, horizonRatio = calib.horizonRatio, roadBottomRatio = calib.roadBottomRatio,
-            centerRatio = calib.centerRatio, birdEyeFit = birdEyeLaneFit)
+            centerRatio = calib.centerRatio, birdEyeFit = birdEyeLaneFit,
+            stabilityTracker = laneStabilityTracker)
     }
     private val classicalLanes = ClassicalLaneFallback()
     private val grayBuf = ByteArray(GRAY_W * GRAY_H)   // reused per-frame for the lane marking-snap

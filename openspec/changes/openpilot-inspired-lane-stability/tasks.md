@@ -14,49 +14,63 @@ See `proposal.md`, `design.md` (D1–D8), `specs/`, and `research/01-openpilot-r
 
 ## 2. LaneTracker core (adas-perception)
 
-- [ ] 2.1 Add `perception/LaneTracker.kt`: a Kalman filter over ego-lane curve
+- [x] 2.1 Add `perception/LaneTracker.kt`: a Kalman filter over ego-lane curve
       coefficients `[a, b, c]` (quadratic `x = a·y² + b·y + c`) in the active fitting
       frame (BEV when `birdEyeLaneFit` on, else image space). One tracker instance per
-      ego boundary (left, right). (design D2)
-- [ ] 2.2 Process model: near-constant (random-walk) coefficients with adaptive process
-      noise `Q` scaled by ego speed and a yaw/curvature proxy; expose `Q` base + scale as
-      `companion` consts. (design D3)
-- [ ] 2.3 Measurement model: take the existing per-frame weighted fit (`robustQuad`/IRLS)
-      as the measurement; derive measurement noise `R` from UFLDv2 existence ×
-      soft-argmax confidence (confidence → covariance). (design D4)
-- [ ] 2.4 Feed per-point UFLDv2 confidence into the fit as point weights (if not already),
-      so faint rows contribute less to the measurement. (design D4)
+      ego boundary (left, right). (design D2) — DONE. With `F = H = I` and diagonal `Q,R`
+      the filter decouples into 3 scalar Kalmans on `(a,b,c)` (no matrix inverse); joint
+      normalized innovation gives the chi-square gate.
+- [~] 2.2 Process model: near-constant (random-walk) coefficients with process noise `Q`
+      exposed as `companion` consts, differentiated per coefficient (`Q_c > Q_a` — offset
+      drifts faster than curvature). (design D3) — PARTIAL: speed/yaw-coupled `Q` deferred —
+      `PerceptionEngine`/`LaneDetector` have no speed signal (speed lives in the warnings
+      layer), so wiring speed into perception is a follow-up; fixed differentiated `Q` ships.
+- [x] 2.3 Measurement model: per-frame quadratic fit (`fitQuad`) is the measurement;
+      measurement noise `R` is inflated by fit residual and by low frame confidence
+      (confidence → covariance). (design D4)
+- [~] 2.4 Per-point confidence as fit weights. — PARTIAL: weighting by UFLDv2 existence
+      already happens upstream (`decodeLane` attaches per-row weight; `robustQuad` uses it).
+      The tracker fits the already-smoothed points unweighted and folds frame confidence
+      into `R` instead. Per-point weights inside the tracker's own fit not added.
 
 ## 3. Gating, gap prediction, consistency (adas-perception)
 
-- [ ] 3.1 Measurement gating: reject/clip an update failing a chi-square normalized-
-      innovation test OR exceeding a per-frame lateral-jump bound; rejected → predict-only
+- [x] 3.1 Measurement gating: reject an update failing a chi-square normalized-innovation
+      test OR exceeding a per-frame lateral-jump bound at `yBot`; rejected → predict-only
       coast. (design D5)
-- [ ] 3.2 Bounded gap prediction: coast at most `TRACK_COAST_MAX` frames; grow prediction
-      covariance each coasted frame; mark track stale past budget and report the lane
-      unavailable. (design D6)
-- [ ] 3.3 Left/right consistency guard: reject/down-weight a one-side measurement that
-      implies implausible lane width or strong non-parallelism vs the confident side;
-      optionally share curvature `a`. (design D7)
+- [x] 3.2 Bounded gap prediction: coast at most `TRACK_COAST_MAX` frames; covariance grows
+      via `predict()` each coasted frame; past budget the track is stale → that side
+      reported empty (lane unavailable); a stale track re-seeds on the next measurement so
+      a persistent new lane is re-acquired. (design D6)
+- [x] 3.3 Left/right consistency guard: when both sides have a measurement that implies a
+      crossing / out-of-range width / width changing too fast across the band (the
+      adjacent-lane-mixing signature), drop the higher-residual side so the good side still
+      updates. (design D7) — strict parallelism softened to a space-agnostic width-ratio
+      check (holds in both perspective and BEV).
 
 ## 4. Wiring & settings (adas-perception, driver-alert-hmi)
 
-- [ ] 4.1 Wire `LaneTracker` into `LaneDetector.detect()` after the per-frame fit, gated
-      on the new toggle; when off, pipeline is byte-for-byte unchanged. (design D8)
-- [ ] 4.2 Publish per-lane confidence / track-validity (measured vs predicted) on the lane
-      geometry so LDW can honour the coast window. (spec: adas-perception output)
-- [ ] 4.3 Add `laneStabilityTracker` to `Prefs` (key `lane_stability_tracker`, default
-      `false`); add `SettingsActivity` switch + `strings.xml` label/hint, mirroring
-      `laneMarkingSnap` / `birdEyeLaneFit`. Thread through `DrivingService` →
-      `PerceptionEngine` → `LaneDetector`.
+- [x] 4.1 Wire `LaneTracker` into `LaneDetector.detect()` after the per-frame fit, gated
+      on the new `stabilityTracker` flag; when off, pipeline is byte-for-byte unchanged.
+      `detect()` now also skips the empty-frame early-return when the tracker is on, so the
+      track can coast through a fully-missing frame. (design D8)
+- [~] 4.2 Track-validity on the lane geometry. — PARTIAL: availability is expressed
+      per-side as empty-vs-non-empty polyline (stale → empty → LDW's existing
+      lane-availability gate goes inactive); an explicit measured-vs-predicted flag on
+      `LaneGeometry` was not added (would need a model-field change). Sufficient for the
+      coast-window LDW behaviour in the spec.
+- [x] 4.3 Add `laneStabilityTracker` to `Prefs` (key `lane_stability_tracker`, default
+      `false`); `SettingsActivity` switch + `strings.xml` label/hint mirroring
+      `laneMarkingSnap` / `birdEyeLaneFit`; threaded `DrivingService` → `PerceptionEngine`
+      → `LaneDetector`.
 - [ ] 4.4 Decide whether the drivable-area overlay consumes the tracked curve (design open
       question) and wire accordingly.
 
 ## 5. Tests & validation
 
-- [ ] 5.1 Unit tests (FakeRunner / `laneOutputs` harness, like `WarningLogicTest`):
-      jitter suppression, outlier rejection of an adjacent-lane-mixed frame, gap
-      prediction within budget, stale-after-budget → unavailable, width/parallelism guard.
+- [x] 5.1 Unit tests (`LaneTrackerTest`, pure-JVM): seed-on-first-frame, jitter
+      suppression, adjacent-lane jump rejection, coast-through-gaps-then-stale,
+      reacquire-after-stale, no-crossing guard. 6/6 green (+ existing 9 WarningLogic green).
 - [ ] 5.2 Replay-feed validation: run zig-zag clip, multi-lane clip, and a real
       lane-change clip; compare tracked vs current; confirm no over-smoothing/lag on the
       genuine lane change. (design D3/D5 risk)

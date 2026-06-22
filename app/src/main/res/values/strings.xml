@@ -35,6 +35,8 @@
     <string name="pref_marking_snap_hint">Snaps detected lanes onto bright road paint for a tighter fit. Helps faint/dashed markings; costs a few ms and may mis-snap in glare.</string>
     <string name="pref_bird_eye">Bird\'s-eye lane fit (experimental)</string>
     <string name="pref_bird_eye_hint">Fits lanes in a top-down view where they\'re straight and parallel — more robust to dashed-line outliers; the solid side anchors the dashed side. Needs a good horizon/centre calibration.</string>
+    <string name="pref_lane_tracker">Lane stability tracker (experimental)</string>
+    <string name="pref_lane_tracker_hint">Tracks the lane curve across frames (Kalman) and rejects single-frame jumps onto the wrong lane — smoother lines, fewer false departures on multi-lane roads, and bridges dashed gaps. Lanes become a tracked curve rather than raw points.</string>
     <string name="pref_hud">HUD mirror mode</string>
     <string name="pref_fcw">Forward collision warning</string>
     <string name="pref_ldw">Lane departure warning</string>
