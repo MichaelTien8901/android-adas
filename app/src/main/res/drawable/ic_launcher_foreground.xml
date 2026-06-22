@@ -1,41 +1,29 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- ADAS mark (inspired by the EDGE concept): an ego car sensing the lane ahead — a
-     perspective road with cyan lane edges + a dashed centre (lane detection), a clean white
-     car, and forward sensor arcs. Sits over the blue gradient background. 108 canvas. -->
+<!-- ADAS "dark guardian" cowl: an original bat-style mask (pointed ears, angular eyes) that
+     leans into the look while staying an original mark (not DC's trademarked bat emblem).
+     The eyes glow cyan like vision sensors, tying it to the ADAS perception theme.
+     Sits over the dark blue gradient background. 108 canvas. -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="108dp"
     android:height="108dp"
     android:viewportWidth="108"
     android:viewportHeight="108">
 
-    <!-- Road band (subtle, for depth), converging to the horizon. -->
-    <path android:fillColor="#0A1A3C" android:fillAlpha="0.65"
-        android:pathData="M33,95 L75,95 L60,45 L48,45 Z" />
+    <!-- Cowl silhouette: two pointed ears, brow V, rounded jaw. -->
+    <path
+        android:pathData="M39,17 L49,44 L54,37 L59,44 L69,17 L72,52 L70,68 L64,80 L54,85 L44,80 L38,68 L36,52 Z"
+        android:fillColor="#0E1933"
+        android:strokeColor="#2E5FA6"
+        android:strokeWidth="1" />
 
-    <!-- Lane edges. -->
-    <path android:pathData="M33,95 L48,45" android:strokeColor="#33C3FF"
-        android:strokeWidth="3.5" android:strokeLineCap="round" />
-    <path android:pathData="M75,95 L60,45" android:strokeColor="#33C3FF"
-        android:strokeWidth="3.5" android:strokeLineCap="round" />
+    <!-- Brow shadow (depth between the ears). -->
+    <path
+        android:pathData="M39,17 L49,44 L54,39 L59,44 L69,17 L60,41 L54,46 L48,41 Z"
+        android:fillColor="#080F20" />
 
-    <!-- Dashed centre line (lane-detection signature), shrinking toward the horizon. -->
-    <path android:fillColor="#F0F4F8" android:pathData="M51.5,84 h5 v9 h-5 z" />
-    <path android:fillColor="#F0F4F8" android:pathData="M52.4,66 h3.2 v6 h-3.2 z" />
-    <path android:fillColor="#F0F4F8" android:pathData="M53,54 h2 v4 h-2 z" />
-
-    <!-- Forward sensor arcs (perception) above the car. -->
-    <path android:pathData="M44,62 A11,11 0 0 1 64,62" android:strokeColor="#5BD6FF"
-        android:strokeWidth="2.4" android:strokeLineCap="round" android:strokeAlpha="0.7" />
-    <path android:pathData="M48,64 A7,7 0 0 1 60,64" android:strokeColor="#9AE7FF"
-        android:strokeWidth="2.4" android:strokeLineCap="round" />
-
-    <!-- Ego car (rear view), clean rounded body. -->
-    <path android:fillColor="#F4F8FC"
-        android:pathData="M44,70 H64 A6,6 0 0 1 70,76 V86 A6,6 0 0 1 64,92 H44 A6,6 0 0 1 38,86 V76 A6,6 0 0 1 44,70 Z" />
-    <!-- Rear window. -->
-    <path android:fillColor="#0B2E6E"
-        android:pathData="M46,73 H62 A3,3 0 0 1 65,76 V79 H43 V76 A3,3 0 0 1 46,73 Z" />
-    <!-- Tail lights. -->
-    <path android:fillColor="#FF4D4D" android:pathData="M39,83 h6 v4 h-6 z" />
-    <path android:fillColor="#FF4D4D" android:pathData="M63,83 h6 v4 h-6 z" />
+    <!-- Glowing cyan sensor-eyes (angled). -->
+    <path android:pathData="M42,60 L52,54 L52.5,59 L42.5,65 Z"
+        android:fillColor="#46D8FF" android:strokeColor="#CBF2FF" android:strokeWidth="0.6" />
+    <path android:pathData="M66,60 L56,54 L55.5,59 L65.5,65 Z"
+        android:fillColor="#46D8FF" android:strokeColor="#CBF2FF" android:strokeWidth="0.6" />
 </vector>
