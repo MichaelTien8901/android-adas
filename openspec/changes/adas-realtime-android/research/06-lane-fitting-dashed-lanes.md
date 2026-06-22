@@ -181,6 +181,41 @@ parametric road model**, not a per-frame free fit:
   [Decoding openpilot's driving model](https://medium.com/@chengyao.shen/decoding-comma-ai-openpilot-the-driving-model-a1ad3b4a3612),
   [The road to openpilot 1.0](https://medium.com/@comma_ai/the-road-to-openpilot-1-0-33829ca94b0c)
 
+### openpilot ("supercombo"), in depth — the anti-zig-zag is in the model
+
+How comma.ai eliminates exactly our problems, structurally (not via post-processing):
+- **One end-to-end net, not a CV pipeline.** EfficientNet-B2 vision backbone → **GRU**
+  (gated recurrent unit) → FC prediction heads. Output is one ~`(1, 6472)` tensor:
+  path, **left/right lane lines**, road edges, leads — each as **points + standard
+  deviations**, for **33 timestamps quadratically spaced to 10 s / 192 m**. Runs
+  ~25 ms on a comma 3X.
+  [Level 2 AD on a single device (openpilot)](https://ar5iv.labs.arxiv.org/html/2206.08176)
+- **Inputs that bake in motion + intent.** It takes **two consecutive frames** (so
+  it sees velocity), a **`desire` one-hot (1×8)** for high-level intent incl. **lane
+  changes**, a left/right traffic-convention flag, AND the **recurrent state** fed
+  back from the previous step. So lane changes are *told* to the model — it doesn't
+  get "confused" by multi-lane geometry, it's commanded through it.
+- **Stability/gap-filling is learned, not post-hoc.** The GRU's 512-dim hidden state
+  carries lane shape across frames (shapes barely change frame-to-frame), so it emits
+  steady **"virtual lane lines" through faded/absent markings** — the learned
+  equivalent of a Kalman predict-through-gaps, but trained on millions of miles.
+- **Uncertainty is a first-class output.** Every lane/path point has a **std**; the
+  planner down-weights uncertain predictions (faded paint, ambiguous multi-lane).
+- **The PATH is the product, lanes are auxiliary.** Modern openpilot is increasingly
+  **end-to-end**: it predicts a *drivable path* directly and **blends** lane-following
+  with that path by confidence — so when lane lines are unreliable it leans on the
+  learned path, then **MPC** smooths the steering. It never tracks raw lane points
+  for control.
+  [How openpilot works in 2021](https://blog.comma.ai/openpilot-in-2021/)
+
+**Implication for us.** openpilot's robustness is *intrinsic to a recurrent,
+uncertainty-aware, end-to-end model trained on huge data* — it can't be bolted onto
+a frozen single-frame UFLDv2. Our realistic options: (a) **classical surrogates** —
+a Kalman/clothoid track ≈ their GRU recurrence, existence-weighting ≈ their std
+outputs, a lane-change/width guard ≈ their `desire` input; or (b) **option G** —
+move to a recurrent/uncertainty-emitting lane model (retrain). (a) is the pragmatic
+path on-device; (b) is the "do it like comma.ai" path.
+
 **Takeaway for us.** The production answer is a **Kalman/EKF track on a constrained
 lane model** (≈ research/06 option D, made physical with a clothoid/cubic): it
 smooths, **predicts through gaps**, and — crucially — **gates the lane-mixing
