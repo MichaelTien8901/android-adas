@@ -22,6 +22,16 @@ the live perception pipeline SHALL behave exactly as before (no capture, no adde
 - **WHEN** the user sets the per-file duration and total storage cap in Settings
 - **THEN** the recorder SHALL use those values for segment rollover and retention
 
+#### Scenario: Auto-start on drive start is configurable
+
+- **WHEN** dashcam is enabled and the "start recording on drive start" option is ON
+- **THEN** recording SHALL begin automatically when a driving session starts
+
+#### Scenario: Manual start when auto-start is off
+
+- **WHEN** dashcam is enabled but the "start recording on drive start" option is OFF
+- **THEN** recording SHALL NOT begin automatically; the record button starts it on demand
+
 ### Requirement: Live record on/off control
 
 The driving overlay SHALL provide a record on/off button that starts and stops capture during

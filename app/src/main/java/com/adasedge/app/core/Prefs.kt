@@ -44,6 +44,12 @@ class Prefs(context: Context) {
         get() = sp.getBoolean(KEY_DASHCAM, false)
         set(v) = sp.edit { putBoolean(KEY_DASHCAM, v) }
 
+    /** Start recording automatically when a driving session begins (vs. waiting for the
+        driver to tap the record button). Only applies when dashcam is enabled. Default on. */
+    var dashcamAutoStart: Boolean
+        get() = sp.getBoolean(KEY_DASHCAM_AUTOSTART, true)
+        set(v) = sp.edit { putBoolean(KEY_DASHCAM_AUTOSTART, v) }
+
     /** Max duration per clip file (minutes); the recorder rolls over to a new file at
         this limit. Default 3 min. */
     var dashcamSegmentMinutes: Int
@@ -108,6 +114,7 @@ class Prefs(context: Context) {
         private const val KEY_LANE_MODEL = "lane_model"
         private const val KEY_HUD = "hud"
         private const val KEY_DASHCAM = "dashcam_enabled"
+        private const val KEY_DASHCAM_AUTOSTART = "dashcam_autostart"
         private const val KEY_DASHCAM_SEG_MIN = "dashcam_segment_minutes"
         private const val KEY_DASHCAM_MAX_MB = "dashcam_max_storage_mb"
         private const val KEY_FCW = "fcw"

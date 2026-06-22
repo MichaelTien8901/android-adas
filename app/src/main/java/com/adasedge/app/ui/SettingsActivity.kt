@@ -34,6 +34,7 @@ class SettingsActivity : AppCompatActivity() {
             headway.bind(prefs.headwayEnabled) { prefs.headwayEnabled = it }
             tsr.bind(prefs.tsrEnabled) { prefs.tsrEnabled = it }
             dashcam.bind(prefs.dashcamEnabled) { prefs.dashcamEnabled = it }
+            dashcamAutoStart.bind(prefs.dashcamAutoStart) { prefs.dashcamAutoStart = it }
             dashcamSegMin.bindInt(prefs.dashcamSegmentMinutes) { prefs.dashcamSegmentMinutes = it }
             dashcamMaxMb.bindInt(prefs.dashcamMaxStorageMb) { prefs.dashcamMaxStorageMb = it }
             replay.bind(prefs.replayMode) { prefs.replayMode = it }

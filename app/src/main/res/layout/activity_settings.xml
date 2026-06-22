@@ -51,6 +51,14 @@
             android:text="@string/pref_dashcam_hint"
             android:textColor="@color/text_muted" android:textSize="13sp" />
 
+        <com.google.android.material.materialswitch.MaterialSwitch
+            android:id="@+id/dashcamAutoStart" style="@style/SettingsSwitch" android:text="@string/pref_dashcam_autostart" />
+        <TextView
+            android:layout_width="match_parent" android:layout_height="wrap_content"
+            android:layout_marginBottom="8dp" android:lineSpacingMultiplier="1.25"
+            android:text="@string/pref_dashcam_autostart_hint"
+            android:textColor="@color/text_muted" android:textSize="13sp" />
+
         <LinearLayout
             android:layout_width="match_parent" android:layout_height="wrap_content"
             android:orientation="horizontal" android:gravity="center_vertical"

@@ -153,7 +153,7 @@ class DrivingService : LifecycleService() {
         camera.start(
             this, surfaceProvider, Size(1280, 720),
             videoCapture = videoCapture,
-            onVideoReady = { dashcam?.start() },
+            onVideoReady = { if (prefs.dashcamAutoStart) dashcam?.start() },
             onVideoBindFailed = {
                 dashcam?.shutdown(); dashcam = null
                 _error.value = "Dashcam unavailable on this device (camera can't record + analyze together)"
