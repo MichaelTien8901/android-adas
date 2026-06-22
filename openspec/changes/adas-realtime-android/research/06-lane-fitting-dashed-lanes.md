@@ -142,6 +142,53 @@ model; retraining removes the need. [RONELD motivation](https://arxiv.org/pdf/20
 - Curve order (C) is the `fitQuadratic` degree; marking-snap (F) would be a new
   pre-fit pass over the source bitmap; (G) is a `tools/` retrain, not app code.
 
+## How production ADAS handle the zig-zag / jitter / lane-mixing
+
+Our pipeline re-derived pieces of the standard stack (BEV, local smoothing, EMA,
+parallel coupling). What **production** lane-keeping systems add — and what most
+directly kills both the zig-zag and the multi-lane "mixing" — is a **tracked
+parametric road model**, not a per-frame free fit:
+
+- **Constrained parametric model (clothoid), not free points.** Production systems
+  fit a **clothoid** road model — a cubic whose coefficients are *physically
+  meaningful* (lateral offset, heading, curvature, curvature-rate), because real
+  roads are built from clothoids (curvature linear in arc length). A model that can
+  only express plausible road shapes **cannot zig-zag**. The clothoid coefficients
+  stay available and usable even with no camera input.
+  [Stable road lane model based on clothoids](https://link.springer.com/chapter/10.1007/978-3-642-16362-3_14),
+  [Review of lane detection & tracking for ADAS](https://www.mdpi.com/2071-1050/13/20/11417)
+- **Kalman/EKF tracking of the model COEFFICIENTS over time.** The single biggest
+  lever: an (extended) Kalman filter on `[offset, heading, curvature, curv-rate]`
+  that (a) **smooths** jitter, (b) **predicts** the lane through dash gaps /
+  occlusion — keeping the lane for **~3 s with no camera input** — and (c) **gates
+  outliers**: a measurement far from the prediction is rejected. That gating is
+  exactly the cure for our **multi-lane mixing** — a row/frame that jumped to an
+  adjacent line is outside the gate and thrown out.
+  [Lane detection based on road model + EKF](https://www.researchgate.net/publication/323197197_Lane_Detection_Based_on_Road_Module_and_Extended_Kalman_Filter),
+  [Precise clothoid road model + EKF](https://publications.lib.chalmers.se/records/fulltext/205164/local_205164.pdf)
+- **Ego-motion compensation.** Vehicle speed + **yaw rate** predict how the lane
+  shifts between frames, so the Kalman prediction is accurate. (We have GPS speed
+  but no yaw — a limitation; IMU yaw could approximate it.)
+  [LDW with ego-motion + vision (US11845428)](https://image-ppubs.uspto.gov/dirsearch-public/print/downloadPdf/11845428)
+- **Temporal smoothing as a weighted average** of current + previous (current
+  weighted higher) is the lightweight version many LDW units ship.
+  [Temporal smoothing to remove lane jitter](https://medium.com/@liamondrop/temporal-smoothing-to-remove-jitter-in-detected-lane-lines-d1430cb5c106)
+- **comma.ai openpilot — temporal fusion *inside* the model.** Its driving net is
+  **recurrent (stateful)**: it feeds previous output back in, so consecutive frames
+  are fused and predictions are stable by construction. It emits 192-point lines
+  **with per-point uncertainty**, and the planner runs **MPC** to produce a smooth
+  trajectory rather than tracking raw points.
+  [Decoding openpilot's driving model](https://medium.com/@chengyao.shen/decoding-comma-ai-openpilot-the-driving-model-a1ad3b4a3612),
+  [The road to openpilot 1.0](https://medium.com/@comma_ai/the-road-to-openpilot-1-0-33829ca94b0c)
+
+**Takeaway for us.** The production answer is a **Kalman/EKF track on a constrained
+lane model** (≈ research/06 option D, made physical with a clothoid/cubic): it
+smooths, **predicts through gaps**, and — crucially — **gates the lane-mixing
+outliers** the user observed. That's the highest-value next step. openpilot's route
+(recurrence + uncertainty inside the net) is the alternative, but it needs
+retraining, so it folds into option G. Everything we've built (BEV straightening,
+robust fit, coupling) becomes the per-frame *measurement* feeding that tracker.
+
 ## Sources
 - [RONELD: Robust Neural Network Output Enhancement for Active Lane Detection](https://arxiv.org/pdf/2010.09548)
 - [End-to-end Lane Detection through Differentiable Least-Squares Fitting](https://arxiv.org/pdf/1902.00293)
@@ -152,3 +199,11 @@ model; retraining removes the need. [RONELD motivation](https://arxiv.org/pdf/20
 - [Preprocessing Methods of Lane Detection and Tracking for Autonomous Driving](https://arxiv.org/pdf/2104.04755)
 - [Systems and methods for lane-marker detection (US10867189)](https://image-ppubs.uspto.gov/dirsearch-public/print/downloadPdf/10867189)
 - [Online Extrinsic Camera Calibration … with a Lane Width Prior](https://arxiv.org/pdf/2008.03722)
+- [Stable Road Lane Model Based on Clothoids](https://link.springer.com/chapter/10.1007/978-3-642-16362-3_14)
+- [Review on Lane Detection and Tracking Algorithms of ADAS (MDPI Sustainability)](https://www.mdpi.com/2071-1050/13/20/11417)
+- [Lane Detection Based on Road Model and Extended Kalman Filter](https://www.researchgate.net/publication/323197197_Lane_Detection_Based_on_Road_Module_and_Extended_Kalman_Filter)
+- [Road Geometry Estimation Using a Precise Clothoid Road Model + EKF (Chalmers)](https://publications.lib.chalmers.se/records/fulltext/205164/local_205164.pdf)
+- [System and method for LDW with ego-motion and vision (US11845428)](https://image-ppubs.uspto.gov/dirsearch-public/print/downloadPdf/11845428)
+- [Temporal Smoothing to Remove Jitter in Detected Lane Lines](https://medium.com/@liamondrop/temporal-smoothing-to-remove-jitter-in-detected-lane-lines-d1430cb5c106)
+- [Decoding comma.ai/openpilot: the driving model](https://medium.com/@chengyao.shen/decoding-comma-ai-openpilot-the-driving-model-a1ad3b4a3612)
+- [comma.ai — The road to openpilot 1.0](https://medium.com/@comma_ai/the-road-to-openpilot-1-0-33829ca94b0c)
