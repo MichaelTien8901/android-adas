@@ -21,9 +21,8 @@ import kotlin.math.min
  *
  * The tracker is frame-agnostic: it consumes whatever per-frame geometry the caller
  * produced (image-space smoothed points, or bird's-eye resampled points) and emits a
- * temporally stable curve resampled over the draw band [yTop, yBot]. It is only wired in
- * when the experimental `laneStabilityTracker` setting is on; otherwise the pipeline is
- * byte-for-byte unchanged.
+ * temporally stable curve resampled over the draw band [yTop, yBot]. It is core to both
+ * lane paths now: TwinLite always tracks, and the legacy UFLDv2 fallback tracks too.
  */
 class LaneTracker(
     private val yTop: Float,

@@ -27,27 +27,6 @@ class Prefs(context: Context) {
         get() = sp.getBoolean(KEY_VOICE, false)
         set(v) = sp.edit { putBoolean(KEY_VOICE, v) }
 
-    /** Experimental: snap detected lane points onto bright road markings before fitting
-        (hybrid refinement). Costs a few ms/frame; can mis-snap on glary scenes. */
-    var laneMarkingSnap: Boolean
-        get() = sp.getBoolean(KEY_MARKING_SNAP, false)
-        set(v) = sp.edit { putBoolean(KEY_MARKING_SNAP, v) }
-
-    /** Experimental: fit lanes in a bird's-eye (top-down) view where they're straight &
-        parallel — more robust to dashed-line outliers; the solid boundary anchors the
-        dashed one. Uses the horizon/hood/centre calibration for the warp. */
-    var birdEyeLaneFit: Boolean
-        get() = sp.getBoolean(KEY_BEV_FIT, false)
-        set(v) = sp.edit { putBoolean(KEY_BEV_FIT, v) }
-
-    /** Experimental: temporally track the ego-lane curve coefficients through a Kalman
-        filter with outlier gating and bounded gap prediction (openpilot-inspired
-        recurrence surrogate). Smooths zig-zag and rejects adjacent-lane mixing; lanes
-        become a tracked curve rather than per-frame points. */
-    var laneStabilityTracker: Boolean
-        get() = sp.getBoolean(KEY_LANE_TRACKER, false)
-        set(v) = sp.edit { putBoolean(KEY_LANE_TRACKER, v) }
-
     /** Lane-detector selector: "twinlite" (default — drivable-area + lane segmentation,
         ego boundaries read directly from the lane-line mask; beat UFLDv2 on the replay
         paint-deviation benchmark and runs on the S26 NPU) | "ufldv2" (legacy fallback). */
@@ -108,9 +87,6 @@ class Prefs(context: Context) {
         private const val KEY_AUDIBLE = "audible"
         private const val KEY_HAPTIC = "haptic"
         private const val KEY_VOICE = "voice"
-        private const val KEY_MARKING_SNAP = "lane_marking_snap"
-        private const val KEY_BEV_FIT = "bird_eye_lane_fit"
-        private const val KEY_LANE_TRACKER = "lane_stability_tracker"
         private const val KEY_LANE_MODEL = "lane_model"
         private const val KEY_HUD = "hud"
         private const val KEY_FCW = "fcw"

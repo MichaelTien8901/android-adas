@@ -28,9 +28,6 @@ import java.io.Closeable
 class PerceptionEngine(
     context: Context,
     private val calib: Calibration = Calibration.DEFAULT,
-    private val laneMarkingSnap: Boolean = false,
-    birdEyeLaneFit: Boolean = false,
-    laneStabilityTracker: Boolean = false,
     private val laneModel: String = "twinlite",
 ) : Closeable {
 
@@ -45,9 +42,11 @@ class PerceptionEngine(
             EngineFactory.create(context, "lane", 3, Config.LANE_INPUT_H, Config.LANE_INPUT_W)
         }.getOrNull() else null
     private val laneDetector = laneRunner?.let {
+        // The Kalman tracker is now core (TwinLite uses it unconditionally), so the UFLDv2
+        // fallback always tracks too; the experimental BEV-fit / marking-snap knobs were
+        // retired with the bake-off.
         LaneDetector(it, horizonRatio = calib.horizonRatio, roadBottomRatio = calib.roadBottomRatio,
-            centerRatio = calib.centerRatio, birdEyeFit = birdEyeLaneFit,
-            stabilityTracker = laneStabilityTracker)
+            centerRatio = calib.centerRatio, birdEyeFit = false, stabilityTracker = true)
     }
     // Bake-off candidate: TwinLiteNet drivable-area + lane segmentation (eval only).
     private val twinliteRunner: ModelRunner? =
@@ -104,9 +103,7 @@ class PerceptionEngine(
                 val fresh = if (twinlite != null) {
                     twinlite.detect(Preprocess.toSegInput(frame, TWIN_W, TWIN_H))
                 } else laneDetector?.let { ld ->
-                    val input = Preprocess.toLaneInput(frame, Config.LANE_INPUT_W, Config.LANE_INPUT_H, Config.LANE_CROP_RATIO)
-                    // Optional hybrid marking-snap (skip the grayscale cost when off).
-                    if (laneMarkingSnap) ld.detect(input, frameGray(frame), GRAY_W, GRAY_H) else ld.detect(input)
+                    ld.detect(Preprocess.toLaneInput(frame, Config.LANE_INPUT_W, Config.LANE_INPUT_H, Config.LANE_CROP_RATIO))
                 } ?: classicalLanes.detect(frame)
                 lastLanes = fresh
                 fresh
