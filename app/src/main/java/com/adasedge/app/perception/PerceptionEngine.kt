@@ -31,6 +31,7 @@ class PerceptionEngine(
     private val laneMarkingSnap: Boolean = false,
     birdEyeLaneFit: Boolean = false,
     laneStabilityTracker: Boolean = false,
+    private val laneModel: String = "ufldv2",
 ) : Closeable {
 
     private val detectorRunner: ModelRunner =
@@ -45,6 +46,15 @@ class PerceptionEngine(
             centerRatio = calib.centerRatio, birdEyeFit = birdEyeLaneFit,
             stabilityTracker = laneStabilityTracker)
     }
+    // Bake-off candidate: TwinLiteNet drivable-area + lane segmentation (eval only).
+    private val twinliteRunner: ModelRunner? =
+        if (laneModel == "twinlite") runCatching {
+            EngineFactory.create(context, "twinlite", 3, TWIN_H, TWIN_W)
+        }.getOrNull() else null
+    private val twinlite: TwinLiteLaneDetector? = twinliteRunner?.let {
+        TwinLiteLaneDetector(it, TWIN_W, TWIN_H, calib.centerRatio, calib.horizonRatio, calib.roadBottomRatio)
+    }
+
     private val classicalLanes = ClassicalLaneFallback()
     private val grayBuf = ByteArray(GRAY_W * GRAY_H)   // reused per-frame for the lane marking-snap
 
@@ -80,7 +90,9 @@ class PerceptionEngine(
             speedLimit?.let { if (frameNo++ % 3L == 0L) lastSigns = runCatching { it.detect(frame) }.getOrDefault(emptyList()) }
             val detections = if (lastSigns.isEmpty()) detected else detected + lastSigns
 
-            val lanes = laneDetector?.let { ld ->
+            val lanes = if (twinlite != null) {
+                twinlite.detect(Preprocess.toSegInput(frame, TWIN_W, TWIN_H))
+            } else laneDetector?.let { ld ->
                 val input = Preprocess.toLaneInput(frame, Config.LANE_INPUT_W, Config.LANE_INPUT_H, Config.LANE_CROP_RATIO)
                 // Optional hybrid marking-snap (skip the grayscale cost when off).
                 if (laneMarkingSnap) ld.detect(input, frameGray(frame), GRAY_W, GRAY_H) else ld.detect(input)
@@ -162,13 +174,15 @@ class PerceptionEngine(
     }
 
     override fun close() {
-        detectorRunner.close(); laneRunner?.close(); signRunner?.close()
+        detectorRunner.close(); laneRunner?.close(); signRunner?.close(); twinliteRunner?.close()
     }
 
     companion object {
         private const val TAG = "PerceptionEngine"
         private const val GRAY_W = 512   // marking-snap grayscale resolution (preserves thin markings)
         private const val GRAY_H = 288
+        private const val TWIN_W = 640   // TwinLiteNet input (eval candidate)
+        private const val TWIN_H = 360
         private const val MARK_CONTRAST = 38   // a paint peak must beat the row mean by this (0..255)
     }
 }

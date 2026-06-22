@@ -48,6 +48,12 @@ class Prefs(context: Context) {
         get() = sp.getBoolean(KEY_LANE_TRACKER, false)
         set(v) = sp.edit { putBoolean(KEY_LANE_TRACKER, v) }
 
+    /** Lane-detector bake-off selector: "ufldv2" (shipped) | "twinlite" (drivable-area
+        + lane segmentation spike). Evaluated on the replay paint-deviation benchmark. */
+    var laneModel: String
+        get() = sp.getString(KEY_LANE_MODEL, "ufldv2") ?: "ufldv2"
+        set(v) = sp.edit { putString(KEY_LANE_MODEL, v) }
+
     var hudMirror: Boolean
         get() = sp.getBoolean(KEY_HUD, false)
         set(v) = sp.edit { putBoolean(KEY_HUD, v) }
@@ -104,6 +110,7 @@ class Prefs(context: Context) {
         private const val KEY_MARKING_SNAP = "lane_marking_snap"
         private const val KEY_BEV_FIT = "bird_eye_lane_fit"
         private const val KEY_LANE_TRACKER = "lane_stability_tracker"
+        private const val KEY_LANE_MODEL = "lane_model"
         private const val KEY_HUD = "hud"
         private const val KEY_FCW = "fcw"
         private const val KEY_LDW = "ldw"

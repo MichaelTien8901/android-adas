@@ -62,6 +62,31 @@ object Preprocess {
      * the bottom [dstH] rows. Returns an NCHW [0,1] RGB input. Lane-y is remapped to
      * full-frame space in LaneDetector using the same [horizonRatio]/[cropRatio].
      */
+    /**
+     * Segmentation input (TwinLiteNet): resize the WHOLE frame to dstW×dstH (no crop, no
+     * letterbox — the model is trained on the full frame), RGB, scaled to [0,1], NCHW.
+     * Camera frames are 16:9 (1280×720) so 640×360 preserves aspect with no distortion.
+     */
+    fun toSegInput(src: Bitmap, dstW: Int, dstH: Int): FloatArray {
+        val scaled = Bitmap.createBitmap(dstW, dstH, Bitmap.Config.ARGB_8888)
+        val canvas = Canvas(scaled)
+        canvas.drawBitmap(src, Matrix().apply {
+            setScale(dstW.toFloat() / src.width, dstH.toFloat() / src.height)
+        }, Paint(Paint.FILTER_BITMAP_FLAG))
+        val pixels = IntArray(dstW * dstH)
+        scaled.getPixels(pixels, 0, dstW, 0, 0, dstW, dstH)
+        scaled.recycle()
+        val plane = dstW * dstH
+        val out = FloatArray(3 * plane)
+        for (i in 0 until plane) {
+            val p = pixels[i]
+            out[i] = ((p shr 16) and 0xFF) / 255f
+            out[plane + i] = ((p shr 8) and 0xFF) / 255f
+            out[2 * plane + i] = (p and 0xFF) / 255f
+        }
+        return out
+    }
+
     fun toLaneInput(src: Bitmap, dstW: Int, dstH: Int, cropRatio: Float): FloatArray {
         // Match UFLDv2's training/deploy preprocessing exactly: resize the WHOLE frame
         // to (dstH/cropRatio) tall then take the bottom dstH rows (drop the top sky =
