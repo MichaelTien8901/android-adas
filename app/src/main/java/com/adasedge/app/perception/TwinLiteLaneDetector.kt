@@ -29,48 +29,58 @@ class TwinLiteLaneDetector(
     private val centerRatio: Float = 0.5f,
     private val horizonRatio: Float = 0.45f,
     private val roadBottomRatio: Float = 1.0f,
+    useTracker: Boolean = true,
 ) {
+    // Same Kalman lane-coefficient tracker used for UFLDv2: smooths the lane curve over
+    // time and gates per-frame outliers (the right boundary's near-field jumps) via the
+    // chi-square + lateral-jump test. On by default for TwinLiteNet — the seg lane head
+    // is accurate but un-smoothed and occasionally noisy on the dashed right boundary.
+    private val tracker: LaneTracker? = if (useTracker) LaneTracker(horizonRatio, roadBottomRatio) else null
+
     fun detect(input: FloatArray): LaneGeometry? {
         val outs = runner.run(input)
         val ll = pick(outs, "ll", 0) ?: return null
-        val da = pick(outs, "da", 1)
         val plane = segW * segH
         if (ll.data.size < 2 * plane) return null
 
         fun isLane(x: Int, y: Int): Boolean {
             val o = y * segW + x; return ll.data[plane + o] > ll.data[o]
         }
-        fun isDriv(x: Int, y: Int): Boolean {
-            if (da == null || da.data.size < 2 * plane) return false
-            val o = y * segW + x; return da.data[plane + o] > da.data[o]
-        }
 
         val yTop = (horizonRatio * segH).toInt().coerceIn(0, segH - 1)
         val yBot = (roadBottomRatio * segH).toInt().coerceIn(0, segH - 1)
         val step = max(1, (yBot - yTop) / SAMPLE_ROWS)
         val cx0 = (centerRatio * segW).toInt().coerceIn(0, segW - 1)
+        // Cap the search to a plausible half-lane so the right boundary can't snap to a
+        // far lane line / the road edge (the R→1.0 outliers); ll-only (no wide da edge).
+        val half = (MAX_HALF * segW).toInt()
+        val loX = max(0, cx0 - half)
+        val hiX = kotlin.math.min(segW - 1, cx0 + half)
 
         val left = ArrayList<FloatArray>()
         val right = ArrayList<FloatArray>()
         var y = yBot
         while (y > yTop) {
-            // Nearest lane-line pixel each side of centre = ego boundary.
+            // Nearest lane-line pixel each side of centre, within the half-lane cap.
             var lx = -1
-            run { var x = cx0; while (x >= 0) { if (isLane(x, y)) { lx = x; break }; x-- } }
+            run { var x = cx0; while (x >= loX) { if (isLane(x, y)) { lx = x; break }; x-- } }
             var rx = -1
-            run { var x = cx0; while (x < segW) { if (isLane(x, y)) { rx = x; break }; x++ } }
-            // Fallback to the drivable-corridor edge when the lane head is blank here.
-            if (lx < 0 && isDriv(cx0, y)) { var x = cx0; while (x > 0 && isDriv(x - 1, y)) x--; lx = x }
-            if (rx < 0 && isDriv(cx0, y)) { var x = cx0; while (x < segW - 1 && isDriv(x + 1, y)) x++; rx = x }
+            run { var x = cx0; while (x <= hiX) { if (isLane(x, y)) { rx = x; break }; x++ } }
 
             val yn = y / segH.toFloat()
-            if (lx in 0 until cx0) left += floatArrayOf(lx / segW.toFloat(), yn)
-            if (rx in (cx0 + 1) until segW) right += floatArrayOf(rx / segW.toFloat(), yn)
+            if (lx in loX until cx0) left += floatArrayOf(lx / segW.toFloat(), yn)
+            if (rx in (cx0 + 1)..hiX) right += floatArrayOf(rx / segW.toFloat(), yn)
             y -= step
         }
         if (left.size < MIN_PTS && right.size < MIN_PTS) return null
         // Order far→near (top→bottom) to match the UFLDv2 output convention.
         left.reverse(); right.reverse()
+
+        if (tracker != null) {
+            val (tl, tr) = tracker.update(left, right, 0.9f)
+            if (tl.isEmpty() && tr.isEmpty()) return null
+            return LaneGeometry(tl, tr, 1f)
+        }
         return LaneGeometry(left, right, 1f)
     }
 
@@ -81,5 +91,6 @@ class TwinLiteLaneDetector(
     private companion object {
         const val SAMPLE_ROWS = 28   // rows sampled across the road band
         const val MIN_PTS = 4
+        const val MAX_HALF = 0.34f   // max |boundary − centre| (frac of width); caps the right snap
     }
 }

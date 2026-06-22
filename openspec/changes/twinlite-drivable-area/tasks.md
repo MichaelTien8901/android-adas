@@ -25,9 +25,18 @@ objective paint-deviation score for TwinLiteNet vs the UFLDv2+tracker baseline.
         runs to the road edge. UFLDv2 near was a stable-but-too-far ~0.82.
       - **Jitter** higher (0.066 vs 0.003 — no temporal smoothing yet).
       - **Latency** lower: ~205 ms CPU vs ~250 ms (1.8 MB model).
-- [ ] 2.3 Decoder refinement (next): drop/cap the wide `da` fallback; cap the `ll` search
-      to a plausible half-lane (kill the R→1.00 / next-lane snaps); use a left-boundary +
-      width prior for the right at near; add temporal smoothing. Re-score.
+- [x] 2.3 Decoder refinement + Kalman: dropped the wide `da` fallback, capped the `ll`
+      search to a half-lane (`MAX_HALF`), and applied the existing `LaneTracker` (Kalman
+      coeffs + chi-square/jump gate) to the TwinLite output. Result on replay:
+      - **Jitter 0.066 → 0.0013 (~40×)** — gross `R→1.00` outliers gone (capped + gated).
+      - Mid ego-right = 0.66–0.69, **on the real paint (0.67–0.68)**.
+      - Visually a clean, smooth corridor; both boundaries converge correctly; right line
+        no longer snaps to the adjacent car / frame edge.
+      - Latency still ~205 ms CPU (1.8 MB model). 100% availability.
+      - Minor residual: near-field right ~0.80–0.84 (a touch wide, but steady not noisy);
+        a left+width prior could tighten it further.
+- [ ] 2.4 Verdict: TwinLite+Kalman beats UFLDv2 on the right-lane failure. Pending — A/B
+      a couple more scene types (curves, fewer-lane roads), then the QNN/HTP follow-up.
 
 ## 3. Decide
 
