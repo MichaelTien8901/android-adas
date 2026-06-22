@@ -35,8 +35,24 @@ objective paint-deviation score for TwinLiteNet vs the UFLDv2+tracker baseline.
       - Latency still ~205 ms CPU (1.8 MB model). 100% availability.
       - Minor residual: near-field right ~0.80–0.84 (a touch wide, but steady not noisy);
         a left+width prior could tighten it further.
-- [ ] 2.4 Verdict: TwinLite+Kalman beats UFLDv2 on the right-lane failure. Pending — A/B
-      a couple more scene types (curves, fewer-lane roads), then the QNN/HTP follow-up.
+- [x] 2.4 Scene A/B (replay sweep, 12 frames): TwinLite+Kalman is clean and correct on
+      straight + curve + multi-lane-with-passing-car sections; right line no longer snaps
+      to adjacent lanes/cars; mid ego-right stays on real paint (0.67–0.69). One residual:
+      occasional sparse/short right boundary on transitions (incomplete, not wrong).
+      Near-field "wide" reading is geometrically consistent (a width prior is a no-op),
+      so the cap+Kalman already resolved the real outliers. **Verdict: TwinLite+Kalman
+      beats UFLDv2 on the right-lane failure.**
+
+## 3. QNN/HTP follow-up (get it off CPU onto the NPU)
+
+- [ ] 3.1 Convert `twinlite.onnx` → DLC (`qairt-converter`, QAIRT 2.47) — input `images`
+      1×3×360×640, outputs `da`,`ll`.
+- [ ] 3.2 INT8 quantize with representative road frames (TwinLite preprocessing: 640×360,
+      RGB, /255) → `twinlite_quant.dlc`; validate seg-mask accuracy vs FP.
+- [ ] 3.3 Generate context binaries `twinlite_v69.bin` (S22+) / `twinlite_v81.bin` (S26),
+      bundle in assets; QnnModelRunner picks them up (multi-output `da`/`ll`).
+- [ ] 3.4 On-device: confirm `twinlite -> QNN_HTP` and the latency drop vs ~205 ms CPU;
+      re-score paint-deviation to confirm INT8 didn't regress the lane head.
 
 ## 3. Decide
 
