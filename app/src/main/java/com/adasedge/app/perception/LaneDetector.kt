@@ -268,7 +268,15 @@ class LaneDetector(
     private fun bevFit(leftRaw: List<FloatArray>, rightRaw: List<FloatArray>): Pair<List<FloatArray>, List<FloatArray>> {
         val h = bevH!!; val hinv = bevHinv!!
         val lb = leftRaw.map { warp(it, h) }
-        val rb = rightRaw.map { warp(it, h) }
+        // Gate the RIGHT boundary against the more-reliable left boundary + measured lane
+        // width BEFORE fitting: drop right points that disagree by ~half a lane — the
+        // adjacent-lane snap. Otherwise that snapped segment is a coherent "clean wrong
+        // line" (low residual) that IRLS keeps and that WINS the curvature coupling below,
+        // bending the lane the wrong way (the far/mid-screen right-line error). Only when
+        // the stability tracker is on (keeps the default path unchanged).
+        val rb = (rightRaw.map { warp(it, h) }).let {
+            if (tracker != null && lb.size >= 4) gateAgainstLeft(lb, it) else it
+        }
         var fL = if (lb.size >= 3) robustQuad(lb) else null
         var fR = if (rb.size >= 3) robustQuad(rb) else null
         if (fL != null && fR != null) {
@@ -303,6 +311,44 @@ class LaneDetector(
             val p = warp(floatArrayOf(xb, yb), hinv)
             floatArrayOf(p[0].coerceIn(0f, 1f), p[1].coerceIn(0f, 1f))
         }
+
+    /**
+     * Gate the right boundary against the (more reliable) left boundary + lane width, in
+     * BEV space. We fit the left lane robustly, measure the lane width from the near field
+     * (where both boundaries are reliable), then predict the right boundary as left + width
+     * at every row and DROP right points that disagree by more than ~half a lane — the
+     * adjacent-lane snap. This removes the snapped segment before it can win the curvature
+     * coupling. Left is the geometric anchor because UFLDv2's right slot (slot 2) is the
+     * one that mixes with the next lane over on multi-lane roads.
+     */
+    private fun gateAgainstLeft(lb: List<FloatArray>, rb: List<FloatArray>): List<FloatArray> {
+        if (rb.size < 4) return rb
+        val fL = robustQuad(lb) ?: return rb
+        val w = medianWidth(lb, rb) ?: return rb
+        if (w <= MIN_LANE_WIDTH_BEV) return rb                    // implausible/degenerate width — don't gate
+        val tol = WIDTH_GATE_FRAC * w
+        val out = rb.filter { p -> kotlin.math.abs(p[0] - (evalQuad(fL.first, p[1]) + w)) <= tol }
+        return if (out.size >= 4) out else rb                     // keep the lane if the gate is too aggressive
+    }
+
+    /** Robust lane width (BEV x) from the near field: median of (right − nearest-left)
+     *  over rows where both boundaries have a point, preferring the near half. */
+    private fun medianWidth(lb: List<FloatArray>, rb: List<FloatArray>): Float? {
+        fun gather(nearOnly: Boolean): MutableList<Float> {
+            val ws = ArrayList<Float>()
+            for (rp in rb) {
+                val lp = lb.minByOrNull { kotlin.math.abs(it[1] - rp[1]) } ?: continue
+                if (kotlin.math.abs(lp[1] - rp[1]) < ROW_MATCH_DY && (!nearOnly || rp[1] > NEAR_BAND_Y))
+                    ws += rp[0] - lp[0]
+            }
+            return ws
+        }
+        val ws = gather(true).ifEmpty { gather(false) }
+        if (ws.size < 3) return null
+        ws.sort(); return ws[ws.size / 2]
+    }
+
+    private fun evalQuad(c: FloatArray, y: Float): Float = c[0] * y * y + c[1] * y + c[2]
 
     /** IRLS robust quadratic fit x = a·y² + b·y + c; returns coeffs + median |residual|. */
     private fun robustQuad(pts: List<FloatArray>): Pair<FloatArray, Float> {
@@ -369,5 +415,11 @@ class LaneDetector(
         const val BEV_X0 = 0.25              // destination rectangle left/right
         const val BEV_X1 = 0.75
         const val CORNER_EMA = 0.1f          // how fast the self-aligning trapezoid tracks the lanes
+        // Right-vs-left width gate (BEV space): drop right points that disagree with
+        // (left + measured width) by more than WIDTH_GATE_FRAC of a lane — the adjacent snap.
+        const val WIDTH_GATE_FRAC = 0.45f    // reject right points off by ≳ this fraction of a lane width
+        const val MIN_LANE_WIDTH_BEV = 0.1f  // below this the width estimate is degenerate — skip gating
+        const val ROW_MATCH_DY = 0.05f       // max |Δy| to pair a right point with a left point
+        const val NEAR_BAND_Y = 0.5f         // BEV y above which rows count as "near" (reliable) for width
     }
 }

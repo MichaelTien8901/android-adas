@@ -151,7 +151,7 @@ class DrivingService : LifecycleService() {
             val computeMs = (System.nanoTime() - computeStart) / 1_000_000.0
             if (frameCounter.get() % 30L == 0L)
                 Log.i(TAG, "latency: perception+warn ${"%.1f".format(computeMs)} ms (path=${engine.accelPath}, ${scheduler.fps.toInt()} fps, dropped=${scheduler.dropped})")
-            if (replayActive) logWarnings(warns, result)
+            if (replayActive) { logWarnings(warns, result); logLaneJitter(result) }
             alert.update(warns)
             _perception.value = result
             _warnings.value = warns
@@ -191,6 +191,55 @@ class DrivingService : LifecycleService() {
         var copy = try { Bitmap.createScaledBitmap(src, w, h, true) } catch (t: Throwable) { return }
         if (copy === src) copy = src.copy(Bitmap.Config.ARGB_8888, false) // never hand over the soon-recycled src
         _replayFrame.value = copy   // ownership passes to the overlay (recycles its previous)
+    }
+
+    // Replay-only lane-stability instrumentation (task 5.2): mean frame-to-frame change
+    // of each ego boundary's bottom-of-frame x — the zig-zag the LaneTracker should
+    // reduce. Log line lets us A/B the `lane_stability_tracker` toggle numerically.
+    private var prevLeftX = Float.NaN
+    private var prevRightX = Float.NaN
+    private var jitterSum = 0f
+    private var jitterN = 0
+    private var laneFrames = 0L
+    private var laneAvail = 0L
+
+    private var prevFarRightX = Float.NaN
+    private var farJitterSum = 0f
+    private var farJitterN = 0
+    private var widthRatioSum = 0f
+    private var widthRatioN = 0
+
+    private fun bottomX(pts: List<FloatArray>?): Float =
+        if (pts != null && pts.isNotEmpty()) pts.last()[0] else Float.NaN
+    private fun farX(pts: List<FloatArray>?): Float =
+        if (pts != null && pts.isNotEmpty()) pts.first()[0] else Float.NaN
+
+    private fun logLaneJitter(r: PerceptionResult) {
+        laneFrames++
+        if (r.lanes?.left?.isNotEmpty() == true || r.lanes?.right?.isNotEmpty() == true) laneAvail++
+        val lx = bottomX(r.lanes?.left); val rx = bottomX(r.lanes?.right)
+        if (!lx.isNaN() && !prevLeftX.isNaN()) { jitterSum += kotlin.math.abs(lx - prevLeftX); jitterN++ }
+        if (!rx.isNaN() && !prevRightX.isNaN()) { jitterSum += kotlin.math.abs(rx - prevRightX); jitterN++ }
+        prevLeftX = lx; prevRightX = rx
+
+        // Far-right diagnostics: its frame-to-frame jitter AND the far/near lane-width
+        // ratio — a far point snapped onto the next lane over makes the lane flare wide at
+        // the top (ratio >> 1), which a correct lane never does.
+        val frx = farX(r.lanes?.right); val flx = farX(r.lanes?.left)
+        if (!frx.isNaN() && !prevFarRightX.isNaN()) { farJitterSum += kotlin.math.abs(frx - prevFarRightX); farJitterN++ }
+        prevFarRightX = frx
+        val wFar = frx - flx; val wNear = rx - lx
+        if (!wFar.isNaN() && !wNear.isNaN() && wNear > 0.05f) { widthRatioSum += wFar / wNear; widthRatioN++ }
+
+        if (laneFrames % 30L == 0L) {
+            val jit = if (jitterN > 0) jitterSum / jitterN else 0f
+            val farJit = if (farJitterN > 0) farJitterSum / farJitterN else 0f
+            val wr = if (widthRatioN > 0) widthRatioSum / widthRatioN else 0f
+            Log.i(TAG, "LANEJITTER tracker=${prefs.laneStabilityTracker} bevGate=true meanBottomDx=${"%.4f".format(jit)} " +
+                "meanFarRightDx=${"%.4f".format(farJit)} widthFar/Near=${"%.2f".format(wr)} " +
+                "avail=${100 * laneAvail / laneFrames}% (n=$jitterN)")
+            jitterSum = 0f; jitterN = 0; farJitterSum = 0f; farJitterN = 0; widthRatioSum = 0f; widthRatioN = 0
+        }
     }
 
     /** Log warning transitions so replay validation is observable in logcat. */
