@@ -58,6 +58,7 @@ class PerceptionEngine(
         TwinLiteLaneDetector(it, TWIN_W, TWIN_H, calib.centerRatio, calib.horizonRatio, calib.roadBottomRatio)
     }
 
+    private var lastLanes: LaneGeometry? = null   // reused on frames where the lane model is skipped
     private val classicalLanes = ClassicalLaneFallback()
     private val grayBuf = ByteArray(GRAY_W * GRAY_H)   // reused per-frame for the lane marking-snap
 
@@ -90,18 +91,29 @@ class PerceptionEngine(
 
             // Speed-limit signs: run the (heavier) recognizer every 3rd frame and
             // carry the result on intermediate frames; the limit persists in TSR anyway.
-            speedLimit?.let { if (frameNo++ % 3L == 0L) lastSigns = runCatching { it.detect(frame) }.getOrDefault(emptyList()) }
+            speedLimit?.let { if (frameNo % 3L == 0L) lastSigns = runCatching { it.detect(frame) }.getOrDefault(emptyList()) }
             val detections = if (lastSigns.isEmpty()) detected else detected + lastSigns
 
-            val lanes = if (twinlite != null) {
-                twinlite.detect(Preprocess.toSegInput(frame, TWIN_W, TWIN_H))
-            } else laneDetector?.let { ld ->
-                val input = Preprocess.toLaneInput(frame, Config.LANE_INPUT_W, Config.LANE_INPUT_H, Config.LANE_CROP_RATIO)
-                // Optional hybrid marking-snap (skip the grayscale cost when off).
-                if (laneMarkingSnap) ld.detect(input, frameGray(frame), GRAY_W, GRAY_H) else ld.detect(input)
-            } ?: classicalLanes.detect(frame)
+            // Lane cadence is decoupled from detection: lanes are temporally stable and
+            // already Kalman-smoothed, while forward object detection (FCW/AEB) is the
+            // safety-critical path that benefits from full rate. Run the (expensive ~60 ms)
+            // lane model every LANE_STRIDE-th frame and reuse the last geometry between, so
+            // detection runs every frame and overall FPS rises.
+            val freshLane = frameNo % LANE_STRIDE == 0L
+            val lanes = if (freshLane) {
+                val fresh = if (twinlite != null) {
+                    twinlite.detect(Preprocess.toSegInput(frame, TWIN_W, TWIN_H))
+                } else laneDetector?.let { ld ->
+                    val input = Preprocess.toLaneInput(frame, Config.LANE_INPUT_W, Config.LANE_INPUT_H, Config.LANE_CROP_RATIO)
+                    // Optional hybrid marking-snap (skip the grayscale cost when off).
+                    if (laneMarkingSnap) ld.detect(input, frameGray(frame), GRAY_W, GRAY_H) else ld.detect(input)
+                } ?: classicalLanes.detect(frame)
+                lastLanes = fresh
+                fresh
+            } else lastLanes
             lanesAvailableLastFrame = lanes != null
-            lanes?.let { runCatching { captureMarkingDbg(frame, it) } }   // replay ground-truth log
+            if (freshLane) lanes?.let { runCatching { captureMarkingDbg(frame, it) } }   // replay ground-truth log
+            frameNo++
 
             val lead = selectLead(detections, w, h, tsNanos)
             PerceptionResult(tsNanos, detections, lanes, lead, w, h)
@@ -186,6 +198,8 @@ class PerceptionEngine(
         private const val GRAY_H = 288
         private const val TWIN_W = 640   // TwinLiteNet input (eval candidate)
         private const val TWIN_H = 360
+        private const val LANE_STRIDE = 2L  // run the lane model every Nth frame; reuse between
+                                            // (lanes are Kalman-smoothed + temporally stable)
         private const val MARK_CONTRAST = 38   // a paint peak must beat the row mean by this (0..255)
     }
 }
