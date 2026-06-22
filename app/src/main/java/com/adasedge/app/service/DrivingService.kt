@@ -35,6 +35,8 @@ import com.adasedge.app.warnings.WarningManager
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import java.util.concurrent.Executors
+import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicLong
 
 /**
@@ -50,6 +52,10 @@ class DrivingService : LifecycleService() {
     private val camera by lazy { CameraController(this) }
     private val replay by lazy { ReplaySource(this) }
     private val scheduler = FrameScheduler()
+    // Perception runs on this dedicated single thread so the producer (camera/replay) can
+    // decode the next frame while the current one infers — decode and HTP inference no
+    // longer serialize. Single-threaded, so engine state stays confined to one thread.
+    private val perceptionExecutor = Executors.newSingleThreadExecutor { r -> Thread(r, "perception-worker") }
     private lateinit var governor: ThermalGovernor
     private lateinit var speed: SpeedContext
     private lateinit var warnings: WarningManager
@@ -141,6 +147,18 @@ class DrivingService : LifecycleService() {
         val tier = governor.tier(scheduler.fps)
         if (frameCounter.incrementAndGet() % governor.frameStride(tier) != 0L) { bitmap.recycle(); return }
         if (!scheduler.tryBegin()) { bitmap.recycle(); return }
+        // Hand off to the perception worker and return immediately so the producer can
+        // decode the next frame during inference. The scheduler in-flight guard already
+        // dropped any frame that arrived while the worker was busy.
+        try {
+            perceptionExecutor.execute { runPerception(engine, bitmap, tsNanos) }
+        } catch (_: java.util.concurrent.RejectedExecutionException) {
+            scheduler.end(); bitmap.recycle()   // executor shutting down (teardown)
+        }
+    }
+
+    /** Heavy per-frame work, always on the single perception-worker thread. */
+    private fun runPerception(engine: PerceptionEngine, bitmap: Bitmap, tsNanos: Long) {
         try {
             val computeStart = System.nanoTime()
             val result = engine.process(bitmap, tsNanos)
@@ -261,7 +279,13 @@ class DrivingService : LifecycleService() {
     }
 
     override fun onDestroy() {
-        replay.stop(); camera.stop(); speed.stop(); alert.release(); perception?.close()
+        // Stop the producers first (no new frames submitted), then drain the in-flight
+        // perception task before closing the engine — otherwise the worker could touch a
+        // closed engine / recycled native context.
+        replay.stop(); camera.stop()
+        perceptionExecutor.shutdown()
+        runCatching { perceptionExecutor.awaitTermination(2, TimeUnit.SECONDS) }
+        speed.stop(); alert.release(); perception?.close()
         _replayFrame.value = null
         super.onDestroy()
     }
