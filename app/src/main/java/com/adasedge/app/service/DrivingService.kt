@@ -237,6 +237,7 @@ class DrivingService : LifecycleService() {
             val e = perception
             Log.i(TAG, "LANEDBG R_raw[N,M,F]=${s(e?.laneDbgRRaw)} R_out=${s(e?.laneDbgROut)} L_out=${s(e?.laneDbgLOut)} " +
                 "meanBottomDx=${"%.4f".format(jit)} avail=${100 * laneAvail / laneFrames}%")
+            e?.laneMarkDbg?.let { Log.i(TAG, "LANEPAINT $it") }   // independent paint vs predicted
             jitterSum = 0f; jitterN = 0; farJitterSum = 0f; farJitterN = 0; widthRatioSum = 0f; widthRatioN = 0
         }
     }

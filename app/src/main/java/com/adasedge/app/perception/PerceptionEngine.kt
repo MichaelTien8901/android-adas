@@ -7,6 +7,7 @@ import com.adasedge.app.core.Calibration
 import com.adasedge.app.core.Config
 import com.adasedge.app.model.AccelPath
 import com.adasedge.app.model.Detection
+import com.adasedge.app.model.LaneGeometry
 import com.adasedge.app.model.LeadEstimate
 import com.adasedge.app.model.ObjectClass
 import com.adasedge.app.model.PerceptionResult
@@ -85,6 +86,7 @@ class PerceptionEngine(
                 if (laneMarkingSnap) ld.detect(input, frameGray(frame), GRAY_W, GRAY_H) else ld.detect(input)
             } ?: classicalLanes.detect(frame)
             lanesAvailableLastFrame = lanes != null
+            lanes?.let { runCatching { captureMarkingDbg(frame, it) } }   // replay ground-truth log
 
             val lead = selectLead(detections, w, h, tsNanos)
             PerceptionResult(tsNanos, detections, lanes, lead, w, h)
@@ -105,6 +107,44 @@ class PerceptionEngine(
         val dist = distance.estimate(lead, w, h) ?: return null
         val ttcSeconds = ttc.update(lead.box.height(), tsNanos)
         return LeadEstimate(lead, dist, ttcSeconds)
+    }
+
+    // Replay GROUND-TRUTH validation: independently detect bright lane paint per row and
+    // compare to the predicted right line. Answers objectively "is R_out on a real marking,
+    // and is there a marking it should be on instead?" — what screenshots can't settle.
+    @Volatile var laneMarkDbg: String? = null
+        private set
+
+    private fun captureMarkingDbg(frame: Bitmap, lanes: LaneGeometry) {
+        val g = frameGray(frame)
+        val yN = calib.roadBottomRatio - 0.03f
+        val yF = calib.horizonRatio + 0.02f
+        val yM = (yN + yF) / 2f
+        fun rx(pts: List<FloatArray>, y: Float): String =
+            pts.minByOrNull { kotlin.math.abs(it[1] - y) }?.takeIf { kotlin.math.abs(it[1] - y) < 0.08f }
+                ?.let { "%.2f".format(it[0]) } ?: "--"
+        fun marks(y: Float): String = markingsInRow(g, y).joinToString(",") { "%.2f".format(it) }
+        laneMarkDbg = "F y=${"%.2f".format(yF)} paint=[${marks(yF)}] L=${rx(lanes.left, yF)} R=${rx(lanes.right, yF)} | " +
+            "M paint=[${marks(yM)}] L=${rx(lanes.left, yM)} R=${rx(lanes.right, yM)} | " +
+            "N paint=[${marks(yN)}] L=${rx(lanes.left, yN)} R=${rx(lanes.right, yN)}"
+    }
+
+    /** Normalized x of bright local-maxima (lane paint) in the grayscale row at [y]. */
+    private fun markingsInRow(g: ByteArray, y: Float): List<Float> {
+        val row = (y * GRAY_H).toInt().coerceIn(0, GRAY_H - 1)
+        val base = row * GRAY_W
+        var sum = 0
+        for (x in 0 until GRAY_W) sum += g[base + x].toInt() and 0xFF
+        val thr = sum / GRAY_W + MARK_CONTRAST
+        val peaks = ArrayList<Float>()
+        var x = 2
+        while (x < GRAY_W - 2) {
+            val v = g[base + x].toInt() and 0xFF
+            if (v >= thr && v >= (g[base + x - 1].toInt() and 0xFF) && v >= (g[base + x + 1].toInt() and 0xFF)) {
+                peaks += x / GRAY_W.toFloat(); x += 8   // dedupe the cluster
+            } else x++
+        }
+        return peaks
     }
 
     /** Downscaled full-frame grayscale (row-major 0..255) for the lane marking-snap. */
@@ -129,5 +169,6 @@ class PerceptionEngine(
         private const val TAG = "PerceptionEngine"
         private const val GRAY_W = 512   // marking-snap grayscale resolution (preserves thin markings)
         private const val GRAY_H = 288
+        private const val MARK_CONTRAST = 38   // a paint peak must beat the row mean by this (0..255)
     }
 }
