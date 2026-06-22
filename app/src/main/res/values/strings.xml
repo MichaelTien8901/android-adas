@@ -2,7 +2,7 @@
     <string name="app_name">ADAS Edge</string>
 
     <string name="disclaimer_title">Driver-Assistance Aid — Read Before Use</string>
-    <string name="disclaimer_body">ADAS Edge is a driver-assistance aid, NOT a certified or autonomous driving system. It provides warnings only and never controls the vehicle.\n\nWarnings may be late, inaccurate, or absent — especially where GPS is weak (tunnels, garages, dense cities), in poor light or weather, or when the camera view is obstructed. Vehicle speed is estimated from GPS, which is coarser and slower than a real car\'s speedometer.\n\nYou remain fully responsible for safe driving at all times. Keep your eyes on the road. Do not rely on this app to avoid a collision. Mount the device so it never obstructs your view.</string>
+    <string name="disclaimer_body">ADAS Edge only shows warnings and never controls the vehicle. Warnings can be late, wrong, or missing — you remain fully responsible. Keep your eyes on the road and don\'t rely on this app to avoid a collision.</string>
     <string name="disclaimer_accept">I understand and accept</string>
     <string name="disclaimer_review">Safety disclaimer</string>
 
