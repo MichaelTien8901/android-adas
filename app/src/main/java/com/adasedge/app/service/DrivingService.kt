@@ -231,13 +231,12 @@ class DrivingService : LifecycleService() {
         val wFar = frx - flx; val wNear = rx - lx
         if (!wFar.isNaN() && !wNear.isNaN() && wNear > 0.05f) { widthRatioSum += wFar / wNear; widthRatioN++ }
 
-        if (laneFrames % 30L == 0L) {
+        if (laneFrames % 15L == 0L) {
             val jit = if (jitterN > 0) jitterSum / jitterN else 0f
-            val farJit = if (farJitterN > 0) farJitterSum / farJitterN else 0f
-            val wr = if (widthRatioN > 0) widthRatioSum / widthRatioN else 0f
-            Log.i(TAG, "LANEJITTER tracker=${prefs.laneStabilityTracker} bevGate=true meanBottomDx=${"%.4f".format(jit)} " +
-                "meanFarRightDx=${"%.4f".format(farJit)} widthFar/Near=${"%.2f".format(wr)} " +
-                "avail=${100 * laneAvail / laneFrames}% (n=$jitterN)")
+            fun s(a: FloatArray?) = a?.joinToString(",") { if (it.isNaN()) "--" else "%.2f".format(it) } ?: "?"
+            val e = perception
+            Log.i(TAG, "LANEDBG R_raw[N,M,F]=${s(e?.laneDbgRRaw)} R_out=${s(e?.laneDbgROut)} L_out=${s(e?.laneDbgLOut)} " +
+                "meanBottomDx=${"%.4f".format(jit)} avail=${100 * laneAvail / laneFrames}%")
             jitterSum = 0f; jitterN = 0; farJitterSum = 0f; farJitterN = 0; widthRatioSum = 0f; widthRatioN = 0
         }
     }

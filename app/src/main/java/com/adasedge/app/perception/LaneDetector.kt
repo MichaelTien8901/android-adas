@@ -154,13 +154,34 @@ class LaneDetector(
         }
 
         val conf = existenceConfidence(exist)
-        if (tracker != null) {
+        val (outLeft, outRight) = if (tracker != null) {
             val (tl, tr) = tracker.update(left, right, conf)
-            if (tl.isEmpty() && tr.isEmpty()) return null   // both tracks stale → unavailable
-            return LaneGeometry(tl, tr, conf)
-        }
-        return LaneGeometry(left, right, conf)
+            if (tl.isEmpty() && tr.isEmpty()) { captureDebug(rightRaw, emptyList(), emptyList()); return null }
+            tl to tr
+        } else left to right
+        captureDebug(rightRaw, outRight, outLeft)   // validation: raw decode vs final output
+        return LaneGeometry(outLeft, outRight, conf)
     }
+
+    // --- Correctness validation (replay): raw model decode vs final output, sampled at
+    // near/mid/far rows. Lets DrivingService log whether a wrong right line comes from the
+    // model's right slot or from the BEV/gate/coupling. Read by DrivingService.logLaneJitter.
+    @Volatile var dbgRRaw = floatArrayOf(Float.NaN, Float.NaN, Float.NaN); private set   // right RAW near/mid/far x
+    @Volatile var dbgROut = floatArrayOf(Float.NaN, Float.NaN, Float.NaN); private set   // right OUT near/mid/far x
+    @Volatile var dbgLOut = floatArrayOf(Float.NaN, Float.NaN, Float.NaN); private set   // left  OUT near/mid/far x
+
+    private fun captureDebug(rRaw: List<FloatArray>, rOut: List<FloatArray>, lOut: List<FloatArray>) {
+        val yN = roadBottomRatio - 0.03f                 // near (bottom)
+        val yF = horizonRatio + 0.02f                    // far  (≈ middle of screen / horizon)
+        val yM = (yN + yF) / 2f                           // mid
+        dbgRRaw = floatArrayOf(sampleX(rRaw, yN), sampleX(rRaw, yM), sampleX(rRaw, yF))
+        dbgROut = floatArrayOf(sampleX(rOut, yN), sampleX(rOut, yM), sampleX(rOut, yF))
+        dbgLOut = floatArrayOf(sampleX(lOut, yN), sampleX(lOut, yM), sampleX(lOut, yF))
+    }
+
+    /** Nearest-row x sample (points are sparse per-row; nearest is fine for diagnostics). */
+    private fun sampleX(pts: List<FloatArray>, y: Float): Float =
+        pts.minByOrNull { kotlin.math.abs(it[1] - y) }?.let { if (kotlin.math.abs(it[1] - y) < 0.08f) it[0] else Float.NaN } ?: Float.NaN
 
     /** Decode one ego lane: soft-argmax per row, existence-gated, temporally smoothed,
      *  optionally snapped to the nearest bright marking pixel. */

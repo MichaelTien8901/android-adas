@@ -60,6 +60,10 @@ class PerceptionEngine(
     private val ttc = TtcEstimator()
 
     val accelPath: AccelPath get() = detectorRunner.accelPath
+    // Replay validation: right lane RAW-decode vs OUTPUT, and left OUTPUT (near/mid/far x).
+    val laneDbgRRaw: FloatArray? get() = laneDetector?.dbgRRaw
+    val laneDbgROut: FloatArray? get() = laneDetector?.dbgROut
+    val laneDbgLOut: FloatArray? get() = laneDetector?.dbgLOut
     @Volatile var lanesAvailableLastFrame: Boolean = false
         private set
 
