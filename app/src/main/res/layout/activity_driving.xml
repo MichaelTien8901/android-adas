@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:keepScreenOn="true">
@@ -14,30 +15,67 @@
         android:layout_width="match_parent"
         android:layout_height="match_parent" />
 
-    <Button
-        android:id="@+id/stopButton"
+    <!-- Modern bottom control bar: a rounded translucent pill holding the session
+         controls (icon + label). IDs are preserved for the activity wiring. -->
+    <LinearLayout
+        android:id="@+id/controlBar"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:layout_gravity="top|end"
-        android:layout_margin="12dp"
-        android:text="@string/stop_driving" />
+        android:layout_gravity="bottom|center_horizontal"
+        android:layout_marginBottom="24dp"
+        android:background="@drawable/bg_control_bar"
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:paddingHorizontal="8dp"
+        android:paddingVertical="4dp">
 
-    <Button
-        android:id="@+id/feedButton"
-        style="?attr/materialButtonOutlinedStyle"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_gravity="top|start"
-        android:layout_margin="12dp"
-        android:text="@string/feed_on" />
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/feedButton"
+            style="@style/Widget.Material3.Button.TextButton"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:insetTop="0dp"
+            android:insetBottom="0dp"
+            android:minWidth="76dp"
+            android:text="@string/feed_on"
+            android:textColor="@color/text_primary"
+            android:textSize="11sp"
+            app:icon="@drawable/ic_feed"
+            app:iconGravity="top"
+            app:iconSize="22dp"
+            app:iconTint="@color/text_primary" />
 
-    <Button
-        android:id="@+id/recordButton"
-        style="?attr/materialButtonOutlinedStyle"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_gravity="bottom|start"
-        android:layout_margin="12dp"
-        android:visibility="gone"
-        android:text="@string/record_off" />
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/recordButton"
+            style="@style/Widget.Material3.Button.TextButton"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:insetTop="0dp"
+            android:insetBottom="0dp"
+            android:minWidth="76dp"
+            android:text="@string/record_off"
+            android:textColor="@color/text_primary"
+            android:textSize="11sp"
+            android:visibility="gone"
+            app:icon="@drawable/ic_record"
+            app:iconGravity="top"
+            app:iconSize="22dp"
+            app:iconTint="@null" />
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/stopButton"
+            style="@style/Widget.Material3.Button.TextButton"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:insetTop="0dp"
+            android:insetBottom="0dp"
+            android:minWidth="76dp"
+            android:text="@string/stop_driving"
+            android:textColor="@color/warn_red"
+            android:textSize="11sp"
+            app:icon="@drawable/ic_stop"
+            app:iconGravity="top"
+            app:iconSize="22dp"
+            app:iconTint="@color/warn_red" />
+    </LinearLayout>
 </FrameLayout>

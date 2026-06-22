@@ -1,15 +1,37 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Minimalist ADAS mark: a clean car silhouette over the ego lane (two cyan lane lines
+     with a dashed centre). Content sits within the 108-canvas safe zone (~18..90). -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="108dp"
     android:height="108dp"
     android:viewportWidth="108"
     android:viewportHeight="108">
-    <!-- Content sits inside the 66x66 adaptive-icon safe zone (centered). -->
-    <group android:translateX="0" android:translateY="2">
-        <!-- road converging to a vanishing point -->
-        <path android:fillColor="#33C3FF" android:pathData="M54,40 L70,76 L38,76 Z" />
-        <path android:fillColor="#0D1B2A" android:pathData="M54,52 L61,74 L47,74 Z" />
-        <!-- alert dot -->
-        <path android:fillColor="#FFB300"
-            android:pathData="M54,32 m-5,0 a5,5 0 1,0 10,0 a5,5 0 1,0 -10,0" />
-    </group>
+
+    <!-- Ego lane: two lane lines widening toward the viewer (perspective). -->
+    <path
+        android:pathData="M49,60 L34,92"
+        android:strokeColor="#33C3FF"
+        android:strokeWidth="5"
+        android:strokeLineCap="round" />
+    <path
+        android:pathData="M59,60 L74,92"
+        android:strokeColor="#33C3FF"
+        android:strokeWidth="5"
+        android:strokeLineCap="round" />
+
+    <!-- Dashed centre line (detection accent). -->
+    <path android:fillColor="#FFB300" android:pathData="M52.5,64 h3 v6 h-3 z" />
+    <path android:fillColor="#FFB300" android:pathData="M52.5,76 h3 v7 h-3 z" />
+
+    <!-- Car (rear view): rounded body. -->
+    <path
+        android:fillColor="#F0F4F8"
+        android:pathData="M44,34 H64 A6,6 0 0 1 70,40 V52 A6,6 0 0 1 64,58 H44 A6,6 0 0 1 38,52 V40 A6,6 0 0 1 44,34 Z" />
+    <!-- Rear window strip. -->
+    <path
+        android:fillColor="#16314C"
+        android:pathData="M46,38 H62 A3,3 0 0 1 65,41 V44 H43 V41 A3,3 0 0 1 46,38 Z" />
+    <!-- Tail lights. -->
+    <path android:fillColor="#D32F2F" android:pathData="M40,50 h6 v4 h-6 z" />
+    <path android:fillColor="#D32F2F" android:pathData="M62,50 h6 v4 h-6 z" />
 </vector>
