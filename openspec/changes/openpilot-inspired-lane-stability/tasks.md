@@ -47,6 +47,13 @@ See `proposal.md`, `design.md` (D1–D8), `specs/`, and `research/01-openpilot-r
       adjacent-lane-mixing signature), drop the higher-residual side so the good side still
       updates. (design D7) — strict parallelism softened to a space-agnostic width-ratio
       check (holds in both perspective and BEV).
+- [x] 3.4 Far/mid-screen right-lane fix (`gateAgainstLeft`, BEV): the tracker stabilizes
+      jitter but can't fix the right boundary snapping onto an ADJACENT lane — a coherent
+      "clean wrong line" (low residual) that wins the BEV curvature coupling and bends the
+      lane inward on curves. Before fitting, gate right points against (robust left fit +
+      median near-field width); drop those off by > 0.45 lane width. Left is the anchor
+      (UFLDv2 slot 2 is the mixer). Replaces the earlier straight-line far gate (hurt
+      curves). Verified on-device replay (screencap A/B on right-curve scenes).
 
 ## 4. Wiring & settings (adas-perception, driver-alert-hmi)
 
@@ -71,9 +78,12 @@ See `proposal.md`, `design.md` (D1–D8), `specs/`, and `research/01-openpilot-r
 - [x] 5.1 Unit tests (`LaneTrackerTest`, pure-JVM): seed-on-first-frame, jitter
       suppression, adjacent-lane jump rejection, coast-through-gaps-then-stale,
       reacquire-after-stale, no-crossing guard. 6/6 green (+ existing 9 WarningLogic green).
-- [ ] 5.2 Replay-feed validation: run zig-zag clip, multi-lane clip, and a real
-      lane-change clip; compare tracked vs current; confirm no over-smoothing/lag on the
-      genuine lane change. (design D3/D5 risk)
+- [x] 5.2 Replay-feed validation (S26 Ultra, on-device): A/B'd the tracker toggle —
+      bottom-x jitter dropped ~4.5x (meanBottomDx 0.0147 → 0.0032) at 100% lane
+      availability; far-right gate verified by screencap on right-curve scenes (right line
+      follows the boundary, no inward bow, doesn't snap to the adjacent car's lane;
+      widthFar/Near 0.18-0.35). Replay-only diagnostics added to DrivingService
+      (LANEJITTER log). Dedicated lane-change-clip over-smoothing/lag check still TODO.
 - [ ] 5.3 On-device A/B on S22+ and S26 Ultra; confirm sub-ms tracker cost against the
       ~33 ms frame budget.
 - [ ] 5.4 Decide shipped default model: 3-state quadratic vs 4-state clothoid (design open
