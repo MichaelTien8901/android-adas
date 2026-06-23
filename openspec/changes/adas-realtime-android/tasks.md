@@ -43,17 +43,22 @@
 - [x] 5.4 Implement monocular distance (pinhole + ground-plane / known-width) with camera intrinsics
 - [x] 5.5 Implement TTC from lead-vehicle bbox-scale change with Kalman/temporal filtering
 - [x] 5.6 Define and publish the timestamped per-frame perception contract (detections + lanes + distance/TTC)
-- [ ] 5.8 Improve dashed-lane fitting robustness (research/06): layer in a
+- [x] 5.8 (SUPERSEDED) Improve dashed-lane fitting robustness (research/06): layer in a
       confidence-weighted + RANSAC/IRLS quadratic fit, then a Kalman track on the
       curve coefficients `[a,b,c]`, and lane-width/parallel coupling so the solid
       boundary anchors the noisy dashed one. Options + sources in
       `research/06-lane-fitting-dashed-lanes.md`.
-      (Done so far: local median+moving-average smoothing on the perspective points.)
-- [ ] 5.9 Bird's-eye (IPM) lane fitting (research/06 §C/E): warp the per-row NN
-      lane points to a top-down view (homography from the horizon/hood/centre
+      — Delivered by the archived `openpilot-inspired-lane-stability` change (the
+      `LaneTracker` Kalman + consistency/width guard), now core to the shipped
+      TwinLite + Kalman lane path (archived `twinlite-drivable-area`).
+- [x] 5.9 (SUPERSEDED — not needed) Bird's-eye (IPM) lane fitting (research/06 §C/E): warp
+      the per-row NN lane points to a top-down view (homography from the horizon/hood/centre
       calibration), where lanes are straight & parallel, fit there with robust
       rejection + a parallel/lane-width coupling (solid boundary anchors the dashed
       one), then warp back to draw. Behind a Settings toggle (default off).
+      — The BEV-fit knob was prototyped then retired; the shipped lane path is TwinLite's
+      direct lane-line mask + the Kalman tracker, which resolved the dashed-line jitter
+      without IPM. Not pursued.
 - [x] 5.7 Lateral center calibration: a camera mounted off-centre / angled makes the straight-ahead point sit away from image x=0.5, biasing lane-departure judgement. Add a calibratable `centerRatio` (Calibration + Prefs, default 0.5) — a third draggable VERTICAL line in the guided calibration — and use it as the ego reference in `LaneDepartureWarning` (replace the hardcoded `ego = 0.5f`) and in the lead-vehicle in-path band (`PerceptionEngine.selectLead` 0.30–0.70).
 
 ## 6. Speed-context service (speed-context)
