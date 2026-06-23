@@ -4,6 +4,20 @@ Implements task 5.8 of `adas-realtime-android` (dashed-lane robustness) as a foc
 change. Borrows openpilot's stability mechanisms as classical surrogates; ports no model.
 See `proposal.md`, `design.md` (D1–D8), `specs/`, and `research/01-openpilot-reuse-analysis.md`.
 
+## Outcome — CLOSED (2026-06-23)
+
+Shipped and now **core**: the `LaneTracker` Kalman (3-state quadratic) is used
+unconditionally by the default TwinLite detector and by the UFLDv2 fallback (the former
+`laneStabilityTracker` toggle was retired when TwinLite became default). On-device A/B
+(S26, replay) confirmed the jitter drop and negligible tracker cost. Open design questions
+resolved by what shipped: the drawn lane/drivable-area overlay consumes the tracked geometry
+(4.4); the shipped model is the 3-state quadratic, not the 4-state clothoid (5.4). Remaining
+`[~]` items (speed-coupled Q 2.2, in-tracker per-point weights 2.4, explicit measured-vs-
+predicted flag 4.2) are documented deferrals, not blockers. **Spec sync deferred**: this
+change MODIFIES base perception/LDW requirements owned by `adas-realtime-android` (still
+active), so it is archived without syncing — the deltas live in the archived change and fold
+into the main specs when adas-realtime-android is archived.
+
 ## 1. Research & decision (done)
 
 - [x] 1.1 Research openpilot reusability (license, model I/O, camera/calibration needs)
@@ -70,7 +84,7 @@ See `proposal.md`, `design.md` (D1–D8), `specs/`, and `research/01-openpilot-r
       `false`); `SettingsActivity` switch + `strings.xml` label/hint mirroring
       `laneMarkingSnap` / `birdEyeLaneFit`; threaded `DrivingService` → `PerceptionEngine`
       → `LaneDetector`.
-- [ ] 4.4 Decide whether the drivable-area overlay consumes the tracked curve (design open
+- [x] 4.4 (RESOLVED: overlay/lanes draw the tracked geometry) Decide whether the drivable-area overlay consumes the tracked curve (design open
       question) and wire accordingly.
 
 ## 5. Tests & validation
@@ -84,15 +98,15 @@ See `proposal.md`, `design.md` (D1–D8), `specs/`, and `research/01-openpilot-r
       follows the boundary, no inward bow, doesn't snap to the adjacent car's lane;
       widthFar/Near 0.18-0.35). Replay-only diagnostics added to DrivingService
       (LANEJITTER log). Dedicated lane-change-clip over-smoothing/lag check still TODO.
-- [ ] 5.3 On-device A/B on S22+ and S26 Ultra; confirm sub-ms tracker cost against the
+- [x] 5.3 (S26 confirmed; tracker cost negligible — 3 scalar Kalmans, no matrix inverse; S22+ not separately A/B'd) On-device A/B on S22+ and S26 Ultra; confirm sub-ms tracker cost against the
       ~33 ms frame budget.
-- [ ] 5.4 Decide shipped default model: 3-state quadratic vs 4-state clothoid (design open
+- [x] 5.4 (RESOLVED: shipped the 3-state quadratic) Decide shipped default model: 3-state quadratic vs 4-state clothoid (design open
       question) from replay results; only then consider a separate change to flip the
       default on.
 
 ## 6. Docs
 
-- [ ] 6.1 Mark task 5.8 of `adas-realtime-android` as implemented-by this change (or fold
+- [x] 6.1 (superseded by TwinLite+tracker; cross-ref noted) Mark task 5.8 of `adas-realtime-android` as implemented-by this change (or fold
       its RANSAC pre-fit note in if 5.2 shows it's needed).
-- [ ] 6.2 `openspec validate openpilot-inspired-lane-stability --strict` clean; archive on
+- [x] 6.2 `openspec validate openpilot-inspired-lane-stability --strict` clean; archive on
       completion.
