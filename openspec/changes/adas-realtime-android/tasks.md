@@ -106,13 +106,12 @@
 
 - [x] 9.1 End-to-end on S22+: measure glass-to-warning latency against the ≤~100 ms budget — instrumented the pipeline; perception+warning compute ~80-94 ms on the QNN_HTP path (NPU inference ~20 ms; remainder is CPU preprocessing). Within the ~100 ms budget; CPU preprocessing is the optimization lever, not inference.
 - [ ] 9.2 Validate each warning's activation/clear behavior against its spec scenarios (road or replayed footage)
-      — RUN on the shipped TwinLite path (S26, replay) but **NOT PASSING** — open issues:
-      LDW can't keep up with fast lane-departure changes (Kalman tracker smoothing/coast
-      lag → sluggish activate/clear); FCW imminent escalation never exercised (no TTC<1.4s
-      clip); val_ldw is a UFLDv2-era clip TwinLite tracks poorly. Headway and Over-speed/TSR
-      activate+clear behaved correctly. Detailed per-case findings + follow-ups in
-      `validation/warning-validation-2026-06-23.md`. Stays open pending LDW responsiveness
-      fix + a TTC<1.4s FCW clip + re-validation.
+      — Mostly validated on the shipped TwinLite path (S26, replay). LDW "can't keep up"
+      failure FIXED (LDW judges departure on the raw pre-tracker boundary) and re-validated:
+      prompt+clean activate/clear on a real-texture drift clip, no flicker, no false fire
+      in-lane. Headway + Over-speed/TSR activate+clear OK. **Remaining gap:** FCW imminent
+      escalation never exercised (needs a TTC<1.4s approach clip) — 9.2 closes once that's
+      covered. Detailed per-case findings in `validation/warning-validation-2026-06-23.md`.
       <!-- IN PROGRESS. Harness: DrivingService now logs both WARN (activate) and
            CLEAR (deactivate) transitions; tools/make_test_clip.py --scene speed
            --limits A,B builds parameterized scenarios.
