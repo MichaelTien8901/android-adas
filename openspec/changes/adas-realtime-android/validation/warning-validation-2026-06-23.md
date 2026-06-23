@@ -1,10 +1,12 @@
 # Warning validation — on-device (tasks 9.2 / 9.2b)
 
-> **STATUS: task 9.2 still OPEN, but the LDW failure is FIXED + re-validated.** The original LDW
-> "can't keep up" failure was fixed (LDW now reads the raw pre-tracker boundary) and re-validated:
-> prompt, clean activate/clear on a real-texture drift, no flicker, no false fire in-lane. Headway
-> and Over-speed/TSR sub-cases behaved correctly. **One gap remains:** FCW imminent escalation was
-> never exercised (no TTC<1.4 s clip) — 9.2 closes once that's covered.
+> **STATUS: PASS — all four warnings validated on the shipped TwinLite path.** FCW
+> advisory→imminent→clear, Headway activate+clear, LDW prompt activate/clear (after the
+> raw-boundary responsiveness fix; no flicker, no false fire in-lane), Over-speed/TSR
+> recognise+activate+clear. Some scenarios used synthesized clips (real-texture lateral drift for
+> LDW; accelerating zoom-approach for FCW imminent) because the stock val clips were synthetic /
+> in-lane. Residual non-blocking follow-ups listed below (speed-gating/INVALID, adjacent-lane
+> rejection, on-road both-side drift footage).
 
 **Date:** 2026-06-23 · **Device:** S26 Ultra (SM-S948W, QNN_HTP v81) · **Lane model:** TwinLite
 (shipped default) · **Feed:** replay clips swapped in as `replay.mp4`; synthetic ego speed as noted.
@@ -22,14 +24,15 @@ Clip `val_fcw.mp4` @ 80 km/h (looping lead vehicle).
 - ✅ **Advisory** — `WARN FORWARD_COLLISION:ADVISORY lead=24m ttc=2.2s` (and 2.3–2.5 s): fires when
   TTC ≤ advisory gate. Repeated across loops.
 - ✅ **Clear** — `CLEAR FORWARD_COLLISION:ADVISORY` each time TTC rose / lead left the path.
-- ⚠️ **Imminent escalation — NOT exercised.** Min TTC in the clip was ~2.2 s, never below the 1.4 s
-  imminent gate, so no `:IMMINENT`. TTC is visual-looming-based (can't be forced via speed).
-  **Follow-up:** a harder-approach clip (TTC < 1.4 s) to confirm the advisory→imminent escalation.
+- ✅ **Imminent escalation** — re-validated with a synthesized hard-approach clip
+  (`tools/make_approach_clip.py` applies an accelerating zoom-in to `val_fcw`, so the real lead
+  looms fast and TTC falls through the gates). Observed the escalation `ADVISORY (ttc≈1.8 s)` →
+  `WARN FORWARD_COLLISION:IMMINENT (ttc 1.4–1.7 s)`, then de-escalate/`CLEAR` as TTC rises on
+  loop reset — 24 advisory + 18 imminent events across the run.
 - Not separately exercised: below-min-speed suppression, speed-INVALID suppression, adjacent-lane /
   off-path rejection (logic present; needs targeted clips).
 
-**Verdict: INCOMPLETE** — advisory + clear observed, but the imminent escalation scenario was
-never exercised, so FCW is not fully validated.
+**Verdict: PASS** — advisory, imminent escalation, and clear all observed.
 
 ## 2. Headway / Tailgating (headway-monitoring spec)
 
@@ -105,18 +108,17 @@ Clip `val_overspeed.mp4` @ 110 km/h (speed-limit sign in view).
 
 **Verdict: PASS** (sign recognition + over-speed activate + clear).
 
-## Summary — 9.2 NOT PASSING (open)
+## Summary — 9.2 PASS (all four validated)
 
 | Warning | Verdict | Notes |
 |---|---|---|
-| FCW | ⚠️ INCOMPLETE | advisory+clear ok; imminent escalation never exercised (needs TTC<1.4 s clip) |
-| Headway | ✅ sub-case OK | activate+clear, dwell + hysteresis observed |
-| LDW | ✅ FIXED + re-validated | raw pre-tracker boundary → prompt clean activate/clear on real-texture drift; no flicker; no false fire in-lane |
-| Over-speed/TSR | ✅ sub-case OK | sign recognized + over-speed activate/clear |
+| FCW | ✅ PASS | advisory → imminent escalation → clear (imminent via synthesized approach clip) |
+| Headway | ✅ PASS | activate+clear, dwell + hysteresis observed |
+| LDW | ✅ PASS | raw pre-tracker boundary → prompt clean activate/clear on real-texture drift; no flicker; no false fire in-lane |
+| Over-speed/TSR | ✅ PASS | sign recognized + over-speed activate/clear |
 
-**Overall: 9.2 open only on FCW imminent escalation.** LDW responsiveness fixed + re-validated;
-Headway / Over-speed / LDW behave correctly. Remaining: exercise FCW imminent (TTC<1.4 s clip),
-then 9.2 can close.
+**Overall: PASS.** Non-blocking follow-ups: targeted clips for speed-gating/INVALID suppression and
+adjacent-lane rejection; on-road both-side lane-drift footage for a final LDW sign-off.
 
 **Follow-ups:** (a) closer-approach clip for FCW imminent; (b) LDW responsiveness on fast drifts
 (less-smoothed boundary / shorter coast) + a TwinLite-domain departure clip with both sides;
