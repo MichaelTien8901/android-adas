@@ -41,11 +41,14 @@ class LaneDepartureWarning(
         val lanes = result.lanes ?: return emptyList()      // lane-availability gate
         val ego = egoCenter
 
-        // The boundaries are now ego-lane-stable (LaneDetector tracks them across the
-        // image centre), so the nearest one is the line being crossed and its side is
-        // correct even mid-departure.
-        val leftX = lanes.left.minByOrNull { abs(it[1] - 1f) }?.get(0)
-        val rightX = lanes.right.minByOrNull { abs(it[1] - 1f) }?.get(0)
+        // Departure is judged on the RAW near-field boundary x (when available) so it tracks
+        // a fast drift promptly; the tracked polyline (used for the overlay) lags behind a
+        // quick departure because of Kalman smoothing/coast. Fall back to the polyline
+        // bottom-x for detectors that don't supply a raw value.
+        val leftX = lanes.rawLeftBottomX.takeIf { !it.isNaN() }
+            ?: lanes.left.minByOrNull { abs(it[1] - 1f) }?.get(0)
+        val rightX = lanes.rawRightBottomX.takeIf { !it.isNaN() }
+            ?: lanes.right.minByOrNull { abs(it[1] - 1f) }?.get(0)
 
         val side: Side
         val gap: Float

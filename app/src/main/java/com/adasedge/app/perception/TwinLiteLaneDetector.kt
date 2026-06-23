@@ -92,12 +92,17 @@ class TwinLiteLaneDetector(
         // Order far→near (top→bottom) to match the UFLDv2 output convention.
         left.reverse(); right.reverse()
 
+        // Raw (pre-tracker) near-field boundary x — the bottom-most measured point each side.
+        // LDW uses this so a fast departure is caught promptly, without the tracker's lag.
+        val rawL = left.lastOrNull()?.get(0) ?: Float.NaN
+        val rawR = right.lastOrNull()?.get(0) ?: Float.NaN
+
         if (tracker != null) {
             val (tl, tr) = tracker.update(left, right, 0.9f)
             if (tl.isEmpty() && tr.isEmpty()) return null
-            return LaneGeometry(tl, tr, 1f)
+            return LaneGeometry(tl, tr, 1f, rawL, rawR)
         }
-        return LaneGeometry(left, right, 1f)
+        return LaneGeometry(left, right, 1f, rawL, rawR)
     }
 
     /** Pick an output by name, else by positional fallback index. */

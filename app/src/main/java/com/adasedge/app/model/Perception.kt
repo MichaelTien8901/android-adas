@@ -28,6 +28,11 @@ data class LaneGeometry(
     val left: List<FloatArray>,   // each point = [x, y] normalized
     val right: List<FloatArray>,
     val confidence: Float,
+    /** Raw (pre-tracker) near-field boundary x per side, for a RESPONSIVE lane-departure
+     *  judgement that doesn't lag behind the smoothed/coasted overlay. NaN when unavailable;
+     *  LDW falls back to the polyline bottom-x then. */
+    val rawLeftBottomX: Float = Float.NaN,
+    val rawRightBottomX: Float = Float.NaN,
 )
 
 /** Distance + TTC estimate for the lead vehicle in the ego path. */
