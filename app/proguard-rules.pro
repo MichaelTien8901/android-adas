@@ -4,3 +4,5 @@
 -keep class org.opencv.** { *; }
 # Keep our JNI bridge to the Qualcomm QNN runtime.
 -keep class com.adasedge.app.inference.qnn.** { *; }
+# TFLite's GPU delegate is optional (we ship CPU/QNN); silence R8 on its absent refs.
+-dontwarn org.tensorflow.lite.gpu.**
