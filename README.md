@@ -120,7 +120,7 @@ without driving, generate a replay clip and push it (see
 [`tools/make_test_clip.py`](tools/make_test_clip.py)):
 ```bash
 build/.export-venv/bin/python tools/make_test_clip.py --scene speed --out build/test_speed.mp4
-adb push build/test_speed.mp4 /sdcard/Android/data/com.adasedge.app/files/replay.mp4
+adb push build/test_speed.mp4 /sdcard/Android/media/com.adasedge.app/replay/replay.mp4
 # then enable Settings ▸ "Replay test video" and start driving mode
 ```
 
@@ -160,6 +160,31 @@ pages — the build links all native libs 16 KB-aligned.)
 - The AI Hub INT8 YOLO model is **not** a drop-in for the ORT decoder (different
   output layout); use it only on the QNN path. `fetch_detector.sh` uses the stock
   Ultralytics export the decoder was written against.
+
+## Recorded clips & replay source (USB-visible storage)
+
+Both live on **shared, USB/MTP-visible storage** — connect the phone to a computer
+and browse **Internal storage**; no `adb` required.
+
+**Recorded dashcam clips** → `Movies/ADASEdge/<YYYY>/<MM>/<YYYY-MM-DD>/`
+```
+Internal storage/Movies/ADASEdge/2026/06/2026-06-28/dashcam_2026-06-28_124530.mp4
+```
+A top-level `Movies/` folder, organized by date (one folder per day); each clip is
+named by capture datetime so it sorts chronologically. Manage them in-app via
+**Settings ▸ Recorded clips** (browse, filter by day, play, share, delete, or set
+as the replay source), or just copy them off over USB. Size-capped retention
+deletes the oldest clips first to stay under the configured cap.
+
+**Replay source clips** → `Android/media/<pkg>/replay/`
+```
+Internal storage/Android/media/com.adasedge.app/replay/replay.mp4
+```
+Drop a clip here to use it as the replay source for validation without driving,
+then enable **Settings ▸ Replay test video**. `replay.mp4` is used if present,
+otherwise the newest `*.mp4` in the folder. These clips also appear in the in-app
+library (play / delete). `Android/media/...` is app-owned yet USB-visible — unlike
+the old hidden `Android/data/...` path, which earlier builds used.
 
 ## Status
 Application code, model toolchain, and the on-device NPU path are implemented and
