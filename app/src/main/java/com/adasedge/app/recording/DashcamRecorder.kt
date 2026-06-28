@@ -3,7 +3,6 @@ package com.adasedge.app.recording
 import android.content.Context
 import android.util.Log
 import androidx.camera.video.FallbackStrategy
-import androidx.camera.video.FileOutputOptions
 import androidx.camera.video.Quality
 import androidx.camera.video.QualitySelector
 import androidx.camera.video.Recorder
@@ -11,7 +10,6 @@ import androidx.camera.video.Recording
 import androidx.camera.video.VideoCapture
 import androidx.camera.video.VideoRecordEvent
 import androidx.core.content.ContextCompat
-import java.io.File
 import java.util.concurrent.Executors
 import java.util.concurrent.ScheduledExecutorService
 import java.util.concurrent.ScheduledFuture
@@ -19,9 +17,10 @@ import java.util.concurrent.TimeUnit
 
 /**
  * Dashcam recorder (dashcam-recording spec). Wraps a CameraX [VideoCapture] (bound as a third
- * use case by CameraController) and drives time-segmented capture: each clip rolls over to a
- * new datetime-named file at [segmentMinutes], and [RecordingStore] retention runs on every
- * rollover so storage stays under the cap. Video-only (no audio → no mic permission).
+ * use case by CameraController) and drives time-segmented capture: each clip rolls over to a new
+ * datetime-named entry in the shared MediaStore library (`Movies/ADASEdge/<date>/`) at
+ * [segmentMinutes], and [RecordingStore] retention runs on every rollover so storage stays under
+ * the cap. Video-only (no audio → no mic permission).
  *
  * Failure-isolated: encoder/storage errors are logged and surfaced via [onError]; they never
  * throw into the camera/session pipeline. The in-progress clip is protected from retention.
@@ -50,7 +49,6 @@ class DashcamRecorder(
         Thread(r, "dashcam-recorder")
     }
     private var recording: Recording? = null
-    private var activeName: String? = null
     private var rollover: ScheduledFuture<*>? = null
     @Volatile private var stopping = false
 
@@ -78,11 +76,11 @@ class DashcamRecorder(
 
     private fun startSegment() {
         try {
-            store.enforce(activeName)              // make room before opening the next file
-            val file: File = store.newClipFile(System.currentTimeMillis())
-            activeName = file.name
-            val pending = videoCapture.output
-                .prepareRecording(context, FileOutputOptions.Builder(file).build())
+            // Evict finalized clips to make room. The in-progress clip is still pending in
+            // MediaStore (and is the newest), so oldest-first eviction never touches it.
+            store.enforce(null)
+            val output = store.newClipOutput(System.currentTimeMillis())
+            val pending = videoCapture.output.prepareRecording(context, output)
             // video-only: do NOT call withAudioEnabled()
             recording = pending.start(ContextCompat.getMainExecutor(context)) { event ->
                 if (event is VideoRecordEvent.Finalize) onSegmentFinalized(event)
@@ -107,6 +105,8 @@ class DashcamRecorder(
         if (event.hasError()) {
             Log.w(TAG, "segment finalize error: ${event.error}")
             onError("dashcam: clip finalize error ${event.error}")
+        } else {
+            Log.i(TAG, "segment saved: ${event.outputResults.outputUri}")
         }
         // The just-finished clip is now eligible for retention.
         exec.execute {

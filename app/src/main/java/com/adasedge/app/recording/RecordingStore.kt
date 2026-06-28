@@ -2,77 +2,68 @@ package com.adasedge.app.recording
 
 import android.content.Context
 import android.util.Log
-import java.io.File
+import androidx.camera.video.MediaStoreOutputOptions
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
 /**
- * Owns the dashcam clip directory and enforces the size-capped circular buffer
- * (dashcam-recording spec: "Size-capped circular retention", "Clips are retrievable").
+ * Retention policy over the MediaStore-backed clip library (dashcam-recording spec:
+ * "Size-capped circular retention", "Clips are retrievable"). Clips live on shared,
+ * MTP/USB-visible storage in a date-organized hierarchy under `Movies/ADASEdge/<YYYY>/<MM>/
+ * <YYYY-MM-DD>/`; [ClipRepository] owns the MediaStore I/O, this class owns the cap math.
  *
- * Clips live under app-specific external storage (`Android/data/<pkg>/files/dashcam/`) so
- * no runtime storage permission is needed and they're pullable via adb / a file manager.
- * Filenames encode the capture datetime so they sort chronologically.
- *
- * The eviction decision is a pure function ([planEviction]) so it is unit-testable without
- * Android; the instance methods do the File I/O around it.
+ * The eviction decision is a pure function ([planEviction]) so it stays unit-testable without
+ * Android; the instance methods do the MediaStore I/O around it. Eviction candidates are
+ * finalized clips only (the in-progress clip is still pending and excluded by the repository),
+ * and oldest-first ordering means the active (newest) clip is never the one deleted.
  */
 class RecordingStore(context: Context, private val maxStorageMb: Int) {
 
-    private val appContext = context.applicationContext
+    private val repo = ClipRepository(context)
 
-    /** The single directory all clips live in (created on demand). */
-    fun dir(): File =
-        File(appContext.getExternalFilesDir(null), DIR_NAME).apply { if (!exists()) mkdirs() }
+    /** CameraX output target for the next segment (dated folder + datetime name). */
+    fun newClipOutput(nowMillis: Long): MediaStoreOutputOptions = repo.newClipOutput(nowMillis)
 
-    /** A new clip file with a datetime name unique within the directory. */
-    fun newClipFile(nowMillis: Long): File {
-        val d = dir()
-        val existing = d.list()?.toSet() ?: emptySet()
-        return File(d, newClipName(nowMillis, existing))
-    }
-
-    fun clips(): List<ClipInfo> =
-        dir().listFiles { f -> f.isFile && f.name.endsWith(EXT) }
-            ?.map { ClipInfo(it.name, it.length(), it.lastModified()) }
-            ?: emptyList()
-
-    /** Free space available on the clip directory's volume, in bytes. */
-    fun freeSpaceBytes(): Long = dir().usableSpace
+    /** Free space available on the shared volume, in bytes. */
+    fun freeSpaceBytes(): Long = repo.freeSpaceBytes()
 
     /**
-     * Enforce the storage cap: delete oldest clips first until the directory is within the
-     * low-water mark, never deleting [activeName]. Best-effort; logs and continues on error.
+     * Enforce the storage cap: delete oldest clips first across the whole hierarchy until the
+     * total is within the low-water mark, never deleting [activeId]. Best-effort.
      * @return number of clips deleted.
      */
-    fun enforce(activeName: String?): Int {
+    fun enforce(activeId: String?): Int {
         val capBytes = maxStorageMb.toLong() * 1024 * 1024
         val lowWater = (capBytes * LOW_WATER_PCT / 100)
-        val toDelete = planEviction(clips(), capBytes, lowWater, activeName)
-        var n = 0
-        val d = dir()
-        for (name in toDelete) {
-            if (runCatching { File(d, name).delete() }.getOrDefault(false)) n++
-            else Log.w(TAG, "failed to delete clip $name")
-        }
+        val toDelete = planEviction(repo.clipInfos(), capBytes, lowWater, activeId)
+        if (toDelete.isEmpty()) return 0
+        val n = repo.deleteIds(toDelete)
         if (n > 0) Log.i(TAG, "retention: deleted $n oldest clip(s) to stay under ${maxStorageMb}MB")
         return n
     }
 
-    data class ClipInfo(val name: String, val sizeBytes: Long, val lastModified: Long)
+    /** Retention model for a clip. [id] is the content-URI string (stable, deletable). */
+    data class ClipInfo(val id: String, val sizeBytes: Long, val captureMillis: Long)
 
     companion object {
         private const val TAG = "RecordingStore"
-        private const val DIR_NAME = "dashcam"
         const val EXT = ".mp4"
         const val PREFIX = "dashcam_"
         /** Delete down to this % of the cap (hysteresis) so we don't evict every segment. */
         private const val LOW_WATER_PCT = 90L
 
         private val NAME_FMT = SimpleDateFormat("yyyy-MM-dd_HHmmss", Locale.US)
+        private val PATH_FMT = SimpleDateFormat("yyyy/MM/yyyy-MM-dd", Locale.US)
+        private val DAY_RE = Regex("""(\d{4}-\d{2}-\d{2})""")
+        private val TS_RE = Regex("""(\d{4}-\d{2}-\d{2}_\d{6})""")
 
-        /** `dashcam_yyyy-MM-dd_HHmmss.mp4`, with a `_N` suffix if the name already exists. */
+        /** MediaStore RELATIVE_PATH for the capture day, e.g. `Movies/ADASEdge/2026/06/2026-06-22/`. */
+        fun relativePath(nowMillis: Long): String =
+            "${ClipRepository.ROOT}/${PATH_FMT.format(Date(nowMillis))}/"
+
+        /** `dashcam_yyyy-MM-dd_HHmmss.mp4`, with a `_N` suffix if the name already exists in the
+         *  target folder (keeps the datetime parseable instead of letting MediaStore rename). */
         fun newClipName(nowMillis: Long, existing: Set<String>): String {
             val base = "$PREFIX${NAME_FMT.format(Date(nowMillis))}"
             var name = "$base$EXT"
@@ -81,26 +72,32 @@ class RecordingStore(context: Context, private val maxStorageMb: Int) {
             return name
         }
 
+        /** "YYYY-MM-DD" parsed from a clip name, or null. */
+        fun dayFromName(name: String): String? = DAY_RE.find(name)?.groupValues?.get(1)
+
+        /** Capture time in millis parsed from a clip name's datetime, or null. */
+        fun captureMillisFromName(name: String): Long? =
+            TS_RE.find(name)?.groupValues?.get(1)?.let { runCatching { NAME_FMT.parse(it)?.time }.getOrNull() }
+
         /**
-         * Pure eviction planner. Returns the names to delete, oldest first, so that total
-         * size drops to at most [lowWaterBytes] — but only when total exceeds [capBytes].
-         * [activeName] is never returned. Ordering is by the datetime in the filename
-         * (lexicographic on the `dashcam_<ts>` prefix), falling back to [ClipInfo.lastModified].
+         * Pure eviction planner. Returns the ids to delete, **oldest first**, so that total size
+         * drops to at most [lowWaterBytes] — but only when total exceeds [capBytes]. [activeId] is
+         * never returned. Ordering is by capture time (tiebreak id).
          */
         fun planEviction(
             clips: List<ClipInfo>,
             capBytes: Long,
             lowWaterBytes: Long,
-            activeName: String?,
+            activeId: String?,
         ): List<String> {
             var total = clips.sumOf { it.sizeBytes }
             if (total <= capBytes) return emptyList()
-            val oldestFirst = clips.sortedWith(compareBy({ it.name }, { it.lastModified }))
+            val oldestFirst = clips.sortedWith(compareBy({ it.captureMillis }, { it.id }))
             val deletions = ArrayList<String>()
             for (c in oldestFirst) {
                 if (total <= lowWaterBytes) break
-                if (c.name == activeName) continue
-                deletions += c.name
+                if (c.id == activeId) continue
+                deletions += c.id
                 total -= c.sizeBytes
             }
             return deletions

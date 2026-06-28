@@ -88,6 +88,17 @@ class Prefs(context: Context) {
         get() = sp.getInt(KEY_REPLAY_SPEED, 70)
         set(v) = sp.edit { putInt(KEY_REPLAY_SPEED, v) }
 
+    /** Library clip chosen as the ADAS replay source (content-URI string). Null = fall back to
+        the pushed `replay.mp4`. Set from the clip library; consumed by the existing replay flow. */
+    var selectedReplayClip: String?
+        get() = sp.getString(KEY_REPLAY_CLIP, null)
+        set(v) = sp.edit { if (v == null) remove(KEY_REPLAY_CLIP) else putString(KEY_REPLAY_CLIP, v) }
+
+    /** One-time legacy `dashcam/` dir → MediaStore migration done (import-and-forget). */
+    var clipMigrationDone: Boolean
+        get() = sp.getBoolean(KEY_CLIP_MIGRATION, false)
+        set(v) = sp.edit { putBoolean(KEY_CLIP_MIGRATION, v) }
+
     /** Calibrated horizon row (0..1) from the guided calibration; drives the lane
         crop + distance geometry. Defaults to the rough built-in value. */
     var horizonRatio: Float
@@ -123,6 +134,8 @@ class Prefs(context: Context) {
         private const val KEY_TSR = "tsr"
         private const val KEY_REPLAY = "replay_mode"
         private const val KEY_REPLAY_SPEED = "replay_speed_kmh"
+        private const val KEY_REPLAY_CLIP = "replay_clip_uri"
+        private const val KEY_CLIP_MIGRATION = "clip_migration_done"
         private const val KEY_HORIZON = "horizon_ratio"
         private const val KEY_ROAD_BOTTOM = "road_bottom_ratio"
         private const val KEY_CENTER = "center_ratio"

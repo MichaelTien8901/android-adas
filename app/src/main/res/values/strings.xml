@@ -59,5 +59,31 @@
     <!-- Validation (debug) -->
     <string name="settings_validation">Validation (debug)</string>
     <string name="pref_replay">Replay test video</string>
-    <string name="pref_replay_hint">Feeds a clip instead of the live camera, with a constant synthetic speed, so warnings can be validated without driving.\n\nPush a clip:\nadb push road.mp4 /sdcard/Android/data/com.adasedge.app/files/replay.mp4\n\nThen enable this and start driving mode.</string>
+    <string name="pref_replay_hint">Feeds a clip instead of the live camera, with a constant synthetic speed, so warnings can be validated without driving.\n\nPush a clip into the USB-visible folder:\nadb push road.mp4 /sdcard/Android/media/com.adasedge.app/replay/replay.mp4\n\nOr pick a recording in the clip library → \"Set as replay source\". Then enable this and start driving mode.</string>
+
+    <!-- Clip library -->
+    <string name="clips_title">Recorded clips</string>
+    <string name="pref_clips">Recorded clips</string>
+    <string name="pref_clips_hint">Browse, play, share, or delete recordings. Clips are saved to Movies/ADASEdge/&lt;date&gt; on shared storage, so they show up as ordinary files over USB.</string>
+    <string name="clips_empty">No recordings yet</string>
+    <string name="clips_empty_filter">No clips match this filter</string>
+    <string name="clips_filter_all">All days</string>
+    <string name="clips_sort">Sort</string>
+    <string name="clips_sort_newest">Newest first</string>
+    <string name="clips_sort_oldest">Oldest first</string>
+    <string name="clip_play">Play</string>
+    <string name="clip_set_replay">Set as replay source</string>
+    <string name="clip_replay_label">Replay source (pushed)</string>
+    <string name="clip_share">Share</string>
+    <string name="clip_delete">Delete</string>
+    <string name="clip_delete_day">Delete this day</string>
+    <string name="clip_replay_set">Replay source set: %1$s</string>
+    <string name="clip_delete_confirm">Delete %1$d clip(s)? This can\'t be undone.</string>
+    <string name="clip_delete_day_confirm">Delete all %1$d clip(s) from %2$s? This can\'t be undone.</string>
+    <string name="clip_deleted">Deleted %1$d clip(s)</string>
+    <string name="clip_selected">%1$d selected</string>
+    <string name="action_delete">Delete</string>
+    <string name="action_share">Share</string>
+    <string name="action_cancel">Cancel</string>
+    <string name="clip_share_title">Share clips</string>
 </resources>

@@ -55,6 +55,14 @@
             android:exported="false"
             android:screenOrientation="landscape" />
 
+        <activity
+            android:name=".ui.ClipLibraryActivity"
+            android:exported="false" />
+
+        <activity
+            android:name=".ui.ClipPlayerActivity"
+            android:exported="false" />
+
         <service
             android:name=".service.DrivingService"
             android:exported="false"

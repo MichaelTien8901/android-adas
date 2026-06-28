@@ -41,6 +41,9 @@ class SettingsActivity : AppCompatActivity() {
             calibrateButton.setOnClickListener {
                 startActivity(Intent(this@SettingsActivity, CalibrationActivity::class.java))
             }
+            clipsButton.setOnClickListener {
+                startActivity(Intent(this@SettingsActivity, ClipLibraryActivity::class.java))
+            }
         }
     }
 

@@ -7,6 +7,7 @@ import android.app.Service
 import android.content.Intent
 import android.content.pm.ServiceInfo
 import android.graphics.Bitmap
+import android.net.Uri
 import android.os.Binder
 import android.os.Build
 import android.os.IBinder
@@ -18,6 +19,7 @@ import androidx.lifecycle.LifecycleService
 import com.adasedge.app.R
 import com.adasedge.app.alert.AlertController
 import com.adasedge.app.camera.CameraController
+import com.adasedge.app.recording.ClipRepository
 import com.adasedge.app.recording.DashcamRecorder
 import com.adasedge.app.recording.RecordingStore
 import com.adasedge.app.core.Calibration
@@ -131,6 +133,8 @@ class DrivingService : LifecycleService() {
     fun attachPreview(surfaceProvider: Preview.SurfaceProvider) {
         if (started) return
         started = true
+        migrateLegacyClipsOnce()
+        runCatching { replay.migrateLegacyReplay() }   // fast same-volume move into the USB folder
         perception = try {
             PerceptionEngine(this, Calibration(horizonRatio = prefs.horizonRatio, roadBottomRatio = prefs.roadBottomRatio, centerRatio = prefs.centerRatio), prefs.laneModel)
         } catch (t: Throwable) {
@@ -138,12 +142,19 @@ class DrivingService : LifecycleService() {
             _error.value = "Model assets missing — see tools/README. Showing camera only."
             null
         }
-        // Validation path (task 9.6): replay a clip instead of the live camera.
-        if (prefs.replayMode && replay.available()) {
-            replayActive = true
-            Log.i(TAG, "REPLAY MODE: ${replay.file().name} @ ${prefs.replaySpeedKmh} km/h (synthetic speed)")
-            replay.start(sink = { bmp, ts -> onFrame(bmp, ts) })
-            return
+        // Validation path (task 9.6): replay a clip instead of the live camera. Prefer a clip
+        // selected in the library; otherwise fall back to the pushed replay.mp4.
+        if (prefs.replayMode) {
+            val selUri = prefs.selectedReplayClip
+                ?.let { runCatching { Uri.parse(it) }.getOrNull() }
+                ?.takeIf { replay.canRead(it) }
+            if (selUri != null || replay.available()) {
+                replayActive = true
+                val name = selUri?.lastPathSegment ?: replay.pushedFile()?.name ?: ReplaySource.FILE_NAME
+                Log.i(TAG, "REPLAY MODE: $name @ ${prefs.replaySpeedKmh} km/h (synthetic speed)")
+                replay.start(selUri, sink = { bmp, ts -> onFrame(bmp, ts) })
+                return
+            }
         }
         speed.start()
         // Dashcam recording (live camera only — replay returned above). Bind a VideoCapture
@@ -174,6 +185,16 @@ class DrivingService : LifecycleService() {
     }
 
     fun recordingAvailable(): Boolean = dashcam != null
+
+    /** Dashcam clips → MediaStore (import-and-forget) on a background thread; marks done only
+     *  once the legacy dir is fully drained so a partial run retries. (The pushed-replay move is
+     *  done synchronously in attachPreview — a fast same-volume rename.) */
+    private fun migrateLegacyClipsOnce() {
+        if (prefs.clipMigrationDone) return
+        Thread({
+            runCatching { if (ClipRepository(this).migrateLegacyComplete()) prefs.clipMigrationDone = true }
+        }, "clip-migration").start()
+    }
 
     private fun onFrame(bitmap: Bitmap, tsNanos: Long) {
         val engine = perception ?: run { bitmap.recycle(); return }

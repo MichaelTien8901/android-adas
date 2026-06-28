@@ -93,6 +93,19 @@
                 android:autofillHints="" />
         </LinearLayout>
 
+        <Button
+            android:id="@+id/clipsButton"
+            style="?attr/materialButtonOutlinedStyle"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:text="@string/pref_clips" />
+        <TextView
+            android:layout_width="match_parent" android:layout_height="wrap_content"
+            android:layout_marginBottom="8dp" android:lineSpacingMultiplier="1.25"
+            android:text="@string/pref_clips_hint"
+            android:textColor="@color/text_muted" android:textSize="13sp" />
+
         <TextView style="@style/SettingsSection" android:text="@string/settings_camera" />
 
         <Button

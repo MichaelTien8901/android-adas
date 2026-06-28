@@ -6,6 +6,7 @@ import android.media.Image
 import android.media.MediaCodec
 import android.media.MediaExtractor
 import android.media.MediaFormat
+import android.net.Uri
 import android.util.Log
 import com.adasedge.app.camera.CameraController
 import java.io.File
@@ -20,21 +21,62 @@ import java.io.File
  * path). Frames are stamped with a synthetic monotonic timestamp advancing by the
  * frame interval so TTC / headway temporal math stays consistent. The clip loops.
  *
- * Push a clip:
- *   adb push road.mp4 /sdcard/Android/data/com.adasedge.app/files/replay.mp4
+ * Source is either a clip selected in the library (content URI) or, as the fallback, a clip
+ * pushed into the USB-visible replay folder:
+ *   adb push road.mp4 /sdcard/Android/media/com.adasedge.app/replay/replay.mp4
  */
 class ReplaySource(context: Context) {
 
     private val appCtx = context.applicationContext
     @Volatile private var running = false
     private var thread: Thread? = null
+    private var sourceUri: Uri? = null
+    private var sourceFile: File? = null
 
-    fun file(): File = File(appCtx.getExternalFilesDir(null), FILE_NAME)
-    fun available(): Boolean = file().let { it.exists() && it.length() > 0 }
+    /** MTP/USB-visible, app-owned folder for the pushed replay clip
+     *  (`Android/media/<pkg>/replay/`). `Android/media` is visible over USB (unlike
+     *  `Android/data`) and app-owned, so a clip dropped in is read by direct path with no
+     *  media permission or MediaStore scan. Created on demand. */
+    fun replayDir(): File =
+        File(appCtx.externalMediaDirs.firstOrNull() ?: appCtx.getExternalFilesDir(null), REPLAY_DIR)
+            .apply { if (!exists()) mkdirs() }
 
-    /** Start feeding decoded frames to [sink]. Returns false if no clip is present. */
-    fun start(@Suppress("UNUSED_PARAMETER") fps: Int = 30, sink: CameraController.FrameSink): Boolean {
-        if (!available()) return false
+    /** The pushed replay clip: `replay.mp4` if present, else the newest `*.mp4` in the folder. */
+    fun pushedFile(): File? {
+        val dir = replayDir()
+        File(dir, FILE_NAME).let { if (it.exists() && it.length() > 0) return it }
+        return dir.listFiles { f -> f.isFile && f.name.endsWith(EXT) }
+            ?.filter { it.length() > 0 }?.maxByOrNull { it.lastModified() }
+    }
+
+    /** A pushed replay clip is present (the no-selection fallback source). */
+    fun available(): Boolean = pushedFile() != null
+
+    /** The selected library clip can be opened for read (else it was deleted/moved). */
+    fun canRead(uri: Uri): Boolean = runCatching {
+        appCtx.contentResolver.openAssetFileDescriptor(uri, "r")?.use { true } ?: false
+    }.getOrDefault(false)
+
+    /** One-time, idempotent move of the legacy app-private `replay.mp4` into the USB-visible
+     *  folder (so an existing replay clip isn't lost). Returns true once nothing remains. */
+    fun migrateLegacyReplay(): Boolean {
+        val legacy = File(appCtx.getExternalFilesDir(null), FILE_NAME)
+        if (!legacy.exists()) return true
+        val target = File(replayDir(), FILE_NAME)
+        if (target.exists()) { legacy.delete(); return true }
+        if (legacy.renameTo(target)) return true   // instant on the same external volume
+        return runCatching { legacy.copyTo(target, overwrite = false); legacy.delete(); true }
+            .getOrDefault(false)
+    }
+
+    /**
+     * Start feeding decoded frames to [sink]. [clipUri] = the selected library clip; null falls
+     * back to the pushed `replay.mp4`. Returns false if no usable source is present.
+     */
+    fun start(clipUri: Uri?, @Suppress("UNUSED_PARAMETER") fps: Int = 30, sink: CameraController.FrameSink): Boolean {
+        sourceUri = clipUri
+        sourceFile = if (clipUri == null) pushedFile() else null
+        if (clipUri == null && sourceFile == null) return false
         running = true
         thread = Thread({ loop(sink) }, "replay-source").apply { start() }
         return true
@@ -44,7 +86,10 @@ class ReplaySource(context: Context) {
         val extractor = MediaExtractor()
         var codec: MediaCodec? = null
         try {
-            extractor.setDataSource(file().absolutePath)
+            val uri = sourceUri
+            if (uri != null) extractor.setDataSource(appCtx, uri, null)
+            else extractor.setDataSource(sourceFile!!.absolutePath)
+            val srcName = uri?.lastPathSegment ?: sourceFile?.name ?: FILE_NAME
             val track = (0 until extractor.trackCount).firstOrNull {
                 extractor.getTrackFormat(it).getString(MediaFormat.KEY_MIME)?.startsWith("video/") == true
             } ?: run { Log.e(TAG, "no video track"); return }
@@ -56,7 +101,7 @@ class ReplaySource(context: Context) {
             val srcFps = if (format.containsKey(MediaFormat.KEY_FRAME_RATE))
                 format.getInteger(MediaFormat.KEY_FRAME_RATE).coerceIn(1, 60) else 30
             val stepNanos = 1_000_000_000L / srcFps
-            Log.i(TAG, "replay start: ${file().name} ${w}x${h} @${srcFps}fps (MediaCodec)")
+            Log.i(TAG, "replay start: $srcName ${w}x${h} @${srcFps}fps (MediaCodec)")
 
             // ByteBuffer mode (no surface) — read frames via getOutputImage.
             codec = MediaCodec.createDecoderByType(mime).apply { configure(format, null, null, 0); start() }
@@ -150,5 +195,7 @@ class ReplaySource(context: Context) {
     companion object {
         private const val TAG = "ReplaySource"
         const val FILE_NAME = "replay.mp4"
+        const val EXT = ".mp4"
+        const val REPLAY_DIR = "replay"
     }
 }
