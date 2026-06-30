@@ -28,6 +28,13 @@ cp "$APP/src/"*.hpp "$DST/"
 if ! grep -q "floatToNative" "$DST/Utils/IOTensor.hpp"; then
   sed -i 's/^ public:/ public:\n  StatusCode floatToNative(float *f, Qnn_Tensor_t *t) { return copyFromFloatToNative(f, t); }\n  StatusCode nativeToFloat(float **o, Qnn_Tensor_t *t) { return convertToFloat(o, t); }/' "$DST/Utils/IOTensor.hpp"
 fi
+# Fix a SampleApp deep-copy bug: deepCopyQnnTensorInfo only sets isDynamicDimensions inside the
+# "src has dynamic dims" branch, so the common no-dynamic-dims case leaves dst with a garbage
+# pointer (V1->V2 version-switch leftover) that freeQnnTensor() free()s on teardown -> SIGABRT
+# (MTE "pointer tag truncated") on the S26. Null it next to the dimensions init.
+if ! grep -q "QNN_TENSOR_SET_IS_DYNAMIC_DIMENSIONS(dst, nullptr)" "$DST/Utils/QnnSampleAppUtils.cpp"; then
+  sed -i 's#\(QNN_TENSOR_SET_DIMENSIONS(dst, nullptr);\)#\1\n  QNN_TENSOR_SET_IS_DYNAMIC_DIMENSIONS(dst, nullptr);#' "$DST/Utils/QnnSampleAppUtils.cpp"
+fi
 
 echo ">> Vendoring arm64 runtime libs -> jniLibs/arm64-v8a (v69 S22+, v81 S26)"
 mkdir -p "$ROOT/app/src/main/jniLibs/arm64-v8a"
