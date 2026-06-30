@@ -131,12 +131,23 @@ class ClipLibraryActivity : AppCompatActivity() {
     // ---- Per-item actions -------------------------------------------------------------------
 
     private fun showActions(clip: Clip) {
-        // The pushed replay clip is a plain file (not a recording): play + delete only.
+        // The pushed replay clip is a plain file (not a recording): play, set-as-replay, delete
+        // (no share — a file:// URI can't be handed to another app).
         if (clip.isReplay) {
-            val actions = arrayOf(getString(R.string.clip_play), getString(R.string.clip_delete))
+            val actions = arrayOf(
+                getString(R.string.clip_play),
+                getString(R.string.clip_set_replay),
+                getString(R.string.clip_delete),
+            )
             AlertDialog.Builder(this)
                 .setTitle(clip.name)
-                .setItems(actions) { _, which -> if (which == 0) play(clip) else confirmDelete(listOf(clip)) }
+                .setItems(actions) { _, which ->
+                    when (which) {
+                        0 -> play(clip)
+                        1 -> setReplaySource(clip)
+                        2 -> confirmDelete(listOf(clip))
+                    }
+                }
                 .show()
             return
         }

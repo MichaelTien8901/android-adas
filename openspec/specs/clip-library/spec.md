@@ -145,8 +145,8 @@ this folder by the one-time migration so an existing replay clip is not lost.
 ### Requirement: Pushed replay clips are manageable in the library
 
 The clip library SHALL also list the clip(s) in the USB-visible replay folder, marked as the
-replay source, and SHALL let the user play and delete them. Deleting a pushed replay clip SHALL
-remove it from that folder.
+replay source, and SHALL let the user play, set as the replay source, and delete them. Deleting
+a pushed replay clip SHALL remove it from that folder.
 
 #### Scenario: Replay clip listed and labelled
 
@@ -157,6 +157,12 @@ remove it from that folder.
 
 - **WHEN** the user plays a pushed replay clip from the library
 - **THEN** it plays in the in-app player like any other clip
+
+#### Scenario: Set a pushed replay clip as the replay source
+
+- **WHEN** the user chooses "set as replay source" on a pushed replay clip and later starts a
+  replay session
+- **THEN** that specific clip drives the replay feed (instead of defaulting to `replay.mp4`)
 
 #### Scenario: Delete a pushed replay clip
 

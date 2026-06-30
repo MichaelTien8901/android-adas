@@ -52,9 +52,11 @@ class ReplaySource(context: Context) {
     /** A pushed replay clip is present (the no-selection fallback source). */
     fun available(): Boolean = pushedFile() != null
 
-    /** The selected library clip can be opened for read (else it was deleted/moved). */
+    /** The selected library clip can be opened for read (else it was deleted/moved). Handles
+     *  both content:// (library recording) and file:// (a pushed clip in the replay folder). */
     fun canRead(uri: Uri): Boolean = runCatching {
-        appCtx.contentResolver.openAssetFileDescriptor(uri, "r")?.use { true } ?: false
+        if (uri.scheme == "file") uri.path?.let { File(it).canRead() } == true
+        else appCtx.contentResolver.openAssetFileDescriptor(uri, "r")?.use { true } ?: false
     }.getOrDefault(false)
 
     /** One-time, idempotent move of the legacy app-private `replay.mp4` into the USB-visible
@@ -74,9 +76,12 @@ class ReplaySource(context: Context) {
      * back to the pushed `replay.mp4`. Returns false if no usable source is present.
      */
     fun start(clipUri: Uri?, @Suppress("UNUSED_PARAMETER") fps: Int = 30, sink: CameraController.FrameSink): Boolean {
-        sourceUri = clipUri
-        sourceFile = if (clipUri == null) pushedFile() else null
-        if (clipUri == null && sourceFile == null) return false
+        // A file:// selection (a pushed clip in the replay folder) is read by path; a content://
+        // selection (a library recording) via the resolver; null = the pushed-clip fallback.
+        val asFile = clipUri?.takeIf { it.scheme == null || it.scheme == "file" }?.path?.let { File(it) }
+        sourceUri = if (asFile != null) null else clipUri
+        sourceFile = asFile ?: if (clipUri == null) pushedFile() else null
+        if (sourceUri == null && sourceFile == null) return false
         running = true
         thread = Thread({ loop(sink) }, "replay-source").apply { start() }
         return true
