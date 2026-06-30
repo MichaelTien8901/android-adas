@@ -16,20 +16,32 @@ import java.io.File
  * can fall back (realtime-inference: "Mismatched or missing context binary").
  */
 class QnnModelRunner private constructor(
-    private val handle: Long,
+    @Volatile private var handle: Long,
 ) : ModelRunner {
 
     override val accelPath = AccelPath.QNN_HTP
 
     override fun run(input: FloatArray): List<TensorOut> {
-        val outs = QnnNative.run(handle, input)
-        val shapes = QnnNative.outputShapes(handle)
+        val h = handle
+        if (h == 0L) return emptyList()   // closed → skip the native call (avoids use-after-free)
+        val outs = QnnNative.run(h, input)
+        val shapes = QnnNative.outputShapes(h)
         return outs.mapIndexed { i, data ->
             TensorOut("out$i", data, shapes.getOrElse(i) { intArrayOf(data.size) })
         }
     }
 
-    override fun close() = QnnNative.release(handle)
+    /** Idempotent: native [QnnNative.release] frees + deletes the model, so a second call on the
+     *  same handle double-frees (SIGABRT). Clear the handle first so a repeat close — or a racing
+     *  run — becomes a no-op. */
+    @Synchronized
+    override fun close() {
+        val h = handle
+        if (h != 0L) {
+            handle = 0L
+            QnnNative.release(h)
+        }
+    }
 
     companion object {
         /** @param modelBase e.g. "detector" → loads detector_<arch>.bin */

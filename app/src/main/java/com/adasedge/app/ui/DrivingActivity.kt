@@ -89,7 +89,14 @@ class DrivingActivity : AppCompatActivity() {
 
     override fun onStop() {
         super.onStop()
+        // Leaving the driving screen (Back or the Stop button) ends the session, so the next
+        // "Start driving" begins fresh and reflects current settings — e.g. after toggling
+        // "Replay test video" off it must use the live camera, not the still-running replay
+        // session. A non-finishing stop (app switch / system) keeps the foreground service
+        // running so an in-progress session survives.
+        if (isFinishing) service?.requestStop()
         runCatching { unbindService(connection) }
+        if (isFinishing) stopService(Intent(this, DrivingService::class.java))
         service = null
     }
 
@@ -116,13 +123,8 @@ class DrivingActivity : AppCompatActivity() {
     }
 
     private fun stopDriving() {
-        // Tell the service to tear itself down (stopForeground + stopSelf) BEFORE we
-        // unbind — a bound + started foreground service won't die on stopService()
-        // alone, which left it running in the background.
-        service?.requestStop()
-        runCatching { unbindService(connection) }
-        stopService(Intent(this, DrivingService::class.java))
-        service = null
+        // finish() triggers onStop(isFinishing), which tears the session down (stopForeground +
+        // stopSelf, unbind, stopService) — keeping the teardown in one place.
         finish()
     }
 }

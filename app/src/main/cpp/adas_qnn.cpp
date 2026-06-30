@@ -240,6 +240,12 @@ Java_com_adasedge_app_inference_qnn_QnnNative_release(JNIEnv*, jobject, jlong ha
   if (m->device && m->fp.qnnInterface.deviceFree) m->fp.qnnInterface.deviceFree(m->device);
   if (m->backend && m->fp.qnnInterface.backendFree) m->fp.qnnInterface.backendFree(m->backend);
   if (m->logHandle && m->fp.qnnInterface.logFree) m->fp.qnnInterface.logFree(m->logHandle);
-  if (m->graphsInfo) qnn_wrapper_api::freeGraphsInfo(&m->graphsInfo, m->graphsCount);
+  // NOTE: qnn_wrapper_api::freeGraphsInfo() aborts (SIGABRT, MTE "pointer tag truncated") inside
+  // freeQnnTensor when releasing a context-binary model on the S26 — a bug in the vendored QNN
+  // SampleApp copy/free path that fires on EVERY teardown (previously masked because the process
+  // was killed right after Stop). The model + its QNN context/device/backend are released above
+  // and `delete m` drops the struct; we intentionally skip the metadata free (~KB per teardown)
+  // rather than crash every time a driving session ends. TODO(npu): root-cause the
+  // QnnSampleAppUtils/QnnWrapperUtils tensor free and restore it.
   delete m;
 }
